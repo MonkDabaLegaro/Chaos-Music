@@ -17,6 +17,9 @@
     "test:coverage": "jest --config ../../jest.config.js --coverage"
   },
   "dependencies": {
+    "@chaos-music/adapters-desktop": "0.1.0",
+    "@chaos-music/contracts": "0.1.0",
+    "@chaos-music/core": "0.1.0",
     "@emotion/react": "^11.13.5",
     "@emotion/styled": "^11.13.5",
     "@mui/icons-material": "^6.1.9",
@@ -64,23 +67,7 @@
   "build": {
     "appId": "com.chaosteam.chaosmusic",
     "productName": "Chaos Music",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist"
-    ],
-    "win": {
-      "target": "nsis",
-      "icon": "../../resources/icons/icon.ico"
-    },
-    "mac": {
-      "target": "dmg",
-      "icon": "../../resources/icons/icon.icns"
-    },
-    "linux": {
-      "target": "AppImage",
-      "icon": "../../resources/icons/icon.png"
-    }
+    "directories": { "output": "release" },
+    "files": ["dist"]
   }
 }
