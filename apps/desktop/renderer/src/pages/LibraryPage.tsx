@@ -1,3 +1,10 @@
+import AlbumIcon from '@mui/icons-material/Album';
+import CategoryIcon from '@mui/icons-material/Category';
+import LibraryMusicIcon from '@mui/icons-material/LibraryMusic';
+import PeopleIcon from '@mui/icons-material/People';
+import PlaylistPlayIcon from '@mui/icons-material/PlaylistPlay';
+import { Button, Stack } from '@mui/material';
+import type { Album, Artist, Genre, Playlist, Track } from '@shared/types';
 import { useEffect, useState } from 'react';
 import AlbumGrid from '../components/library/AlbumGrid';
 import ArtistGrid from '../components/library/ArtistGrid';
@@ -8,17 +15,19 @@ import { useLibrary } from '../hooks/useLibrary';
 import { usePlayer } from '../hooks/usePlayer';
 import { useQueue } from '../hooks/useQueue';
 
+type LibraryTab = 'songs' | 'albums' | 'artists' | 'genres' | 'playlists';
+
 export default function LibraryPage() {
   const { loadTracks, loadAlbums, loadArtists, loadGenres, loadPlaylists } = useLibrary();
   const { playTrack, playTracks } = usePlayer();
   const { addToQueue } = useQueue();
-  
-  const [activeTab, setActiveTab] = useState<'songs' | 'albums' | 'artists' | 'genres' | 'playlists'>('songs');
-  const [tracks, setTracks] = useState<import('../../../../shared/types').Track[]>([]);
-  const [albums, setAlbums] = useState<import('../../../../shared/types').Album[]>([]);
-  const [artists, setArtists] = useState<import('../../../../shared/types').Artist[]>([]);
-  const [genres, setGenres] = useState<Array<{ id: string; name: string; trackCount: number }>>([]);
-  const [playlists, setPlaylists] = useState<import('../../../../shared/types').Playlist[]>([]);
+
+  const [activeTab, setActiveTab] = useState<LibraryTab>('songs');
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,125 +41,90 @@ export default function LibraryPage() {
           loadGenres(),
           loadPlaylists(),
         ]);
-        
         setTracks(tracksData);
         setAlbums(albumsData);
         setArtists(artistsData);
         setGenres(genresData);
         setPlaylists(playlistsData);
-      } catch (err) {
-        console.error('Failed to load library data:', err);
+      } catch (error) {
+        console.error('Failed to load library data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadData();
+    void loadData();
   }, [loadTracks, loadAlbums, loadArtists, loadGenres, loadPlaylists]);
 
-  const tabs = [
-    { id: 'songs', label: 'Canciones', icon: '🎵' },
-    { id: 'albums', label: 'Álbums', icon: '💿' },
-    { id: 'artists', label: 'Artistas', icon: '👤' },
-    { id: 'genres', label: 'Géneros', icon: '🎸' },
-    { id: 'playlists', label: 'Playlists', icon: '📋' },
-  ] as const;
+  const tabs: Array<{ id: LibraryTab; label: string; icon: React.ReactNode }> = [
+    { id: 'songs', label: 'Canciones', icon: <LibraryMusicIcon fontSize="small" /> },
+    { id: 'albums', label: 'Álbumes', icon: <AlbumIcon fontSize="small" /> },
+    { id: 'artists', label: 'Artistas', icon: <PeopleIcon fontSize="small" /> },
+    { id: 'genres', label: 'Géneros', icon: <CategoryIcon fontSize="small" /> },
+    { id: 'playlists', label: 'Playlists', icon: <PlaylistPlayIcon fontSize="small" /> },
+  ];
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <span>Cargando biblioteca...</span>
-      </div>
-    );
+    return <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>Cargando biblioteca...</div>;
   }
 
   return (
     <div style={{ padding: '20px', overflowY: 'auto', height: '100%' }}>
-      {/* Tabs */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '8px', 
-        marginBottom: '24px',
-        flexWrap: 'wrap'
-      }}>
-        {tabs.map(tab => (
-          <button
+      <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: 'wrap', gap: 1 }}>
+        {tabs.map((tab) => (
+          <Button
             key={tab.id}
+            startIcon={tab.icon}
+            variant={activeTab === tab.id ? 'contained' : 'text'}
             onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: '10px 20px',
-              background: activeTab === tab.id ? 'var(--primary)' : 'var(--surface)',
-              border: 'none',
-              borderRadius: '20px',
-              cursor: 'pointer',
-              color: activeTab === tab.id ? 'var(--on-primary)' : 'var(--text-primary)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
           >
-            <span>{tab.icon}</span>
-            <span>{tab.label}</span>
-          </button>
+            {tab.label}
+          </Button>
         ))}
-      </div>
+      </Stack>
 
-      {/* Content */}
       {activeTab === 'songs' && (
-        <TrackList 
-          tracks={tracks}
-          showAlbum={true}
-          showArtist={true}
-          showGenre={true}
-          onTrackClick={playTrack}
-          onAddToQueue={addToQueue}
-          onPlayAll={() => playTracks(tracks)}
-        />
+        <>
+          <Stack direction="row" justifyContent="flex-end" sx={{ mb: 2 }}>
+            <Button disabled={tracks.length === 0} onClick={() => void playTracks(tracks)}>Reproducir todo</Button>
+          </Stack>
+          <TrackList
+            tracks={tracks}
+            onTrackClick={(track) => void playTrack(track)}
+            onTrackPlay={(track) => void playTrack(track)}
+            onAddToQueue={(track) => void addToQueue(track)}
+          />
+        </>
       )}
 
       {activeTab === 'albums' && (
-        <AlbumGrid 
+        <AlbumGrid
           albums={albums}
-          onAlbumClick={(album) => {
-            const albumTracks = tracks.filter(t => t.albumId === album.id);
-            playTracks(albumTracks);
-          }}
-          onAddToQueue={(album) => {
-            const albumTracks = tracks.filter(t => t.albumId === album.id);
-            addToQueue(albumTracks);
-          }}
+          onAlbumClick={(album) => void playTracks(tracks.filter((track) => track.albumId === album.id))}
+          onAlbumPlay={(album) => void playTracks(tracks.filter((track) => track.albumId === album.id))}
+          onAddToQueue={(album) => void addToQueue(tracks.filter((track) => track.albumId === album.id))}
         />
       )}
 
       {activeTab === 'artists' && (
-        <ArtistGrid 
+        <ArtistGrid
           artists={artists}
-          onArtistClick={(artist) => {
-            const artistTracks = tracks.filter(t => t.artist === artist.name);
-            playTracks(artistTracks);
-          }}
+          onArtistClick={(artist) => void playTracks(tracks.filter((track) => track.artist === artist.name))}
         />
       )}
 
       {activeTab === 'genres' && (
-        <GenreList 
+        <GenreList
           genres={genres}
-          onGenreClick={(genre) => {
-            const genreTracks = tracks.filter(t => t.genre === genre.name);
-            playTracks(genreTracks);
-          }}
+          onGenreClick={(genre) => void playTracks(tracks.filter((track) => track.genre === genre.name))}
         />
       )}
 
       {activeTab === 'playlists' && (
-        <PlaylistList 
+        <PlaylistList
           playlists={playlists}
-          onPlaylistClick={(playlist) => {
-            console.log('Playlist clicked:', playlist);
-          }}
-          onCreatePlaylist={() => {
-            console.log('Create playlist');
-          }}
+          onPlaylistClick={(playlist) => console.info('Playlist selected:', playlist.name)}
+          onCreatePlaylist={() => console.info('Create playlist requested')}
         />
       )}
     </div>
