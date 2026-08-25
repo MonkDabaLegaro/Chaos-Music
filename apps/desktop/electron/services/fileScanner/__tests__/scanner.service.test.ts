@@ -1,4 +1,5 @@
 import * as fs from 'node:fs/promises';
+import { fileScannerService } from '../scanner.service';
 
 const mockDatabaseService = {
   getLibraryById: jest.fn(),
@@ -14,17 +15,13 @@ const mockDatabaseService = {
 jest.mock('../../database/database.service', () => ({ databaseService: mockDatabaseService }));
 
 describe('FileScannerService', () => {
-  let fileScannerService: typeof import('../scanner.service').fileScannerService;
-
   beforeEach(() => {
-    jest.resetModules();
     jest.clearAllMocks();
     mockDatabaseService.getAllFilePaths.mockReturnValue([]);
     mockDatabaseService.getExcludedPaths.mockReturnValue([]);
     mockDatabaseService.getTrackByPath.mockReturnValue(null);
     (fs.stat as jest.Mock).mockResolvedValue({ mtime: new Date(), size: 1024 });
     (fs.readdir as jest.Mock).mockResolvedValue([]);
-    fileScannerService = require('../scanner.service').fileScannerService;
   });
 
   it('rechaza una biblioteca inexistente', async () => {
