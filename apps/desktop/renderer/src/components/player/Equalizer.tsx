@@ -1,14 +1,17 @@
+import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import {
-    Box,
-    Button,
-    FormControl,
-    Grid,
-    InputLabel,
-    MenuItem,
-    Select,
-    Slider,
-    Typography,
+  Box,
+  Button,
+  FormControl,
+  Grid,
+  IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
+  Slider,
+  Tooltip,
+  Typography,
 } from '@mui/material';
 import React from 'react';
 
@@ -51,56 +54,35 @@ const Equalizer: React.FC<EqualizerProps> = ({
     onChange?.(newValues);
   };
 
-  const handleReset = () => {
-    onChange?.([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
-  };
+  const handleReset = () => onChange?.([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
 
   return (
-    <Box
-      sx={{
-        p: 3,
-        bgcolor: 'background.paper',
-        borderRadius: 2,
-      }}
-    >
+    <Box sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h6">Ecualizador</Typography>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<RefreshIcon />}
-          onClick={handleReset}
-        >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h6">Ecualizador</Typography>
+          <Tooltip title={enabled ? 'Desactivar ecualizador' : 'Activar ecualizador'}>
+            <IconButton onClick={onToggle} size="small" color={enabled ? 'primary' : 'default'}>
+              <PowerSettingsNewIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
+        <Button variant="outlined" size="small" startIcon={<RefreshIcon />} onClick={handleReset}>
           Restablecer
         </Button>
       </Box>
 
       <FormControl fullWidth size="small" sx={{ mb: 3 }}>
         <InputLabel>Preset</InputLabel>
-        <Select
-          label="Preset"
-          defaultValue="Personalizado"
-          onChange={(e) => onPresetChange?.(e.target.value as string)}
-        >
-          {presets.map((preset) => (
-            <MenuItem key={preset.name} value={preset.name}>
-              {preset.name}
-            </MenuItem>
-          ))}
+        <Select label="Preset" defaultValue="Personalizado" onChange={(e) => onPresetChange?.(e.target.value as string)}>
+          {presets.map((preset) => <MenuItem key={preset.name} value={preset.name}>{preset.name}</MenuItem>)}
         </Select>
       </FormControl>
 
       <Grid container spacing={1} alignItems="flex-end">
         {values.map((value, index) => (
-          <Grid item key={index} xs={6} sm={1.2} sx={{ textAlign: 'center' }}>
-            <Box
-              sx={{
-                height: 150,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-              }}
-            >
+          <Grid item key={frequencies[index]} xs={6} sm={1.2} sx={{ textAlign: 'center' }}>
+            <Box sx={{ height: 150, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <Slider
                 value={value}
                 onChange={handleSliderChange(index)}
@@ -108,22 +90,15 @@ const Equalizer: React.FC<EqualizerProps> = ({
                 min={-20}
                 max={20}
                 step={1}
+                disabled={!enabled}
                 sx={{
                   height: '100%',
                   color: enabled ? 'primary.main' : 'grey.600',
-                  '& .MuiSlider-thumb': {
-                    width: 16,
-                    height: 8,
-                    borderRadius: 1,
-                  },
+                  '& .MuiSlider-thumb': { width: 16, height: 8, borderRadius: 1 },
                 }}
               />
-              <Typography variant="caption" sx={{ mt: 0.5, color: 'text.secondary' }}>
-                {frequencies[index]}
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {value > 0 ? `+${value}` : value}
-              </Typography>
+              <Typography variant="caption" sx={{ mt: 0.5, color: 'text.secondary' }}>{frequencies[index]}</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>{value > 0 ? `+${value}` : value}</Typography>
             </Box>
           </Grid>
         ))}
