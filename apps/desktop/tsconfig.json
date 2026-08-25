@@ -8,5 +8,6 @@
       "@shared/*": ["shared/*"]
     }
   },
-  "include": ["electron", "renderer", "shared", "electron.vite.config.ts"]
+  "include": ["electron", "renderer", "shared", "electron.vite.config.ts"],
+  "exclude": ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/*.spec.tsx"]
 }
