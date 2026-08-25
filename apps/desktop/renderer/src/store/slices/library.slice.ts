@@ -1,5 +1,5 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { Album, Artist, Genre, LibraryStats, Playlist, Track } from '../../../shared/types';
+import type { Album, Artist, Genre, LibraryStats, Playlist, Track } from '@shared/types';
 
 interface LibraryState {
   tracks: Track[];
@@ -21,8 +21,8 @@ const initialState: LibraryState = {
 };
 
 export const fetchTracks = createAsyncThunk('library/fetchTracks', async (_options?: { artistId?: string; albumId?: string; genre?: string; limit?: number }) => [] as Track[]);
-export const fetchAlbums = createAsyncThunk('library/fetchAlbums', async (_options?: { artistId?: string; genre?: string }) => [] as Album[]);
-export const fetchArtists = createAsyncThunk('library/fetchArtists', async (_options?: { genre?: string }) => [] as Artist[]);
+export const fetchAlbums = createAsyncThunk('library/fetchAlbums', async (_options?: { artistId?: string; genre?: string; limit?: number }) => [] as Album[]);
+export const fetchArtists = createAsyncThunk('library/fetchArtists', async (_options?: { genre?: string; limit?: number }) => [] as Artist[]);
 export const fetchGenres = createAsyncThunk('library/fetchGenres', async () => [] as Genre[]);
 export const fetchPlaylists = createAsyncThunk('library/fetchPlaylists', async () => [] as Playlist[]);
 export const fetchLibraryStats = createAsyncThunk('library/fetchStats', async () => ({} as LibraryStats));

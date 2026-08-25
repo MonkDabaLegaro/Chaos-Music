@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { Dialog, ThemeMode, Toast } from '../../../shared/types';
+import type { Dialog, ThemeMode, Toast } from '@shared/types';
 
 interface UIState {
   theme: ThemeMode;

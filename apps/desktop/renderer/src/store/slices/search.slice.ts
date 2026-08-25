@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { Album, Artist, SearchFilters, SearchResult, Track, YouTubePlaylist, YouTubeVideo } from '../../../shared/types';
+import type { Album, Artist, SearchFilters, SearchResult, Track, YouTubePlaylist, YouTubeVideo } from '@shared/types';
 
 interface SearchState {
   query: string;
