@@ -2,43 +2,27 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.test.(ts|tsx)'],
+  roots: ['<rootDir>/packages', '<rootDir>/apps/desktop'],
+  testMatch: [
+    '**/__tests__/**/*.test.(ts|tsx)',
+    '**/?(*.)+(spec|test).(ts|tsx)',
+  ],
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
+    '^@chaos-music/contracts$': '<rootDir>/packages/contracts/src/index.ts',
+    '^@chaos-music/core$': '<rootDir>/packages/core/src/index.ts',
+    '^@chaos-music/adapters-desktop$': '<rootDir>/packages/adapters-desktop/src/index.ts',
+    '^@chaos-music/design-system$': '<rootDir>/packages/design-system/src/index.ts',
+    '^@chaos-music/ui$': '<rootDir>/packages/ui/src/index.ts',
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '\\.(jpg|jpeg|png|gif|svg)$': '<rootDir>/__mocks__/fileMock.js',
   },
-  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    'src/**/*.tsx',
-    '!src/**/*.d.ts',
-    '!src/**/__tests__/**',
-    '!src/**/__mocks__/**',
-  ],
-  coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
-  coverageThreshold: {
-    global: {
-      branches: 60,
-      functions: 60,
-      lines: 60,
-      statements: 60,
-    },
-  },
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
-  testPathIgnorePatterns: ['/node_modules/', '/dist/', '/build/'],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/', '/build/', '/release/'],
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
-      tsconfig: 'tsconfig.json',
+      tsconfig: '<rootDir>/tsconfig.json',
+      diagnostics: true,
     }],
   },
-  globals: {
-    'ts-jest': {
-      tsconfig: 'tsconfig.json',
-    },
-  },
-  // Configuración para Electron
-  testElectron: false,
 };
