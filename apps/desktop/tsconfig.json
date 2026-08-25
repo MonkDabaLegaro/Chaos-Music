@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@desktop/*": ["./*"],
+      "@electron/*": ["electron/*"],
+      "@renderer/*": ["renderer/src/*"],
+      "@shared/*": ["shared/*"]
+    }
+  },
+  "include": ["electron", "renderer", "shared", "electron.vite.config.ts"]
+}
