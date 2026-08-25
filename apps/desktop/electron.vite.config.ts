@@ -2,10 +2,17 @@ import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import path from 'node:path';
 
 const root = __dirname;
+const aliases = {
+  '@desktop': root,
+  '@electron': path.resolve(root, 'electron'),
+  '@renderer': path.resolve(root, 'renderer/src'),
+  '@shared': path.resolve(root, 'shared'),
+};
 
 export default defineConfig({
   main: {
     root: path.resolve(root, 'electron'),
+    resolve: { alias: aliases },
     build: {
       outDir: path.resolve(root, 'dist/main'),
       rollupOptions: {
@@ -18,6 +25,7 @@ export default defineConfig({
   },
   preload: {
     root: path.resolve(root, 'electron/preload'),
+    resolve: { alias: aliases },
     build: {
       outDir: path.resolve(root, 'dist/preload'),
       rollupOptions: {
@@ -30,6 +38,7 @@ export default defineConfig({
   },
   renderer: {
     root: path.resolve(root, 'renderer'),
+    resolve: { alias: aliases },
     build: {
       outDir: path.resolve(root, 'dist/renderer'),
       rollupOptions: {
