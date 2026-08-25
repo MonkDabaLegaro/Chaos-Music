@@ -1,7 +1,6 @@
 import { BrowserWindow, ipcMain } from 'electron';
 
 import './library.handler';
-import './player.handler';
 import './youtube.handler';
 
 ipcMain.on('window:minimize', () => {

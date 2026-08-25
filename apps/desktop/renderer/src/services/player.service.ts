@@ -1,5 +1,7 @@
-import type { PlayerState, Track } from '../../../shared/types';
-import { ipcService } from './ipc.service';
+import { PlayerService as CorePlayerService } from '@chaos-music/core';
+import type { Track } from '../../../shared/types';
+import type { PlayerState } from '../../../shared/types';
+import { WebAudioEngine } from '../platform/WebAudioEngine';
 
 export interface PlayerService {
   play: () => Promise<void>;
@@ -13,7 +15,7 @@ export interface PlayerService {
   setRepeat: (mode: 'off' | 'all' | 'one') => Promise<void>;
   setShuffle: (enabled: boolean) => Promise<void>;
   getState: () => Promise<PlayerState>;
-  addToQueue: (trackIds: string[]) => Promise<void>;
+  addToQueue: (tracks: Track[]) => Promise<void>;
   clearQueue: () => Promise<void>;
   removeFromQueue: (index: number) => Promise<void>;
   reorderQueue: (fromIndex: number, toIndex: number) => Promise<void>;
@@ -22,135 +24,43 @@ export interface PlayerService {
   togglePlayPause: () => Promise<void>;
 }
 
+const audioEngine = new WebAudioEngine();
+const core = new CorePlayerService(audioEngine);
+audioEngine.onEnded(() => { void core.next(); });
+
 class PlayerServiceImpl implements PlayerService {
-  async play(): Promise<void> {
-    const response = await ipcService.play();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to play');
-    }
-  }
+  play() { return core.play(); }
+  pause() { return core.pause(); }
+  stop() { return core.stop(); }
+  next() { return core.next(); }
+  previous() { return core.previous(); }
+  seek(position: number) { return core.seek(position); }
+  setVolume(volume: number) { return core.setVolume(volume); }
+  setPosition(position: number) { return core.seek(position); }
+  async setRepeat(mode: 'off' | 'all' | 'one') { core.setRepeatMode(mode); }
+  async setShuffle(enabled: boolean) { core.setShuffle(enabled); }
+  addToQueue(tracks: Track[]) { return core.addToQueue(tracks); }
+  clearQueue() { return core.clearQueue(); }
+  removeFromQueue(index: number) { return core.removeFromQueue(index); }
+  reorderQueue(fromIndex: number, toIndex: number) { return core.reorderQueue(fromIndex, toIndex); }
+  playTrack(track: Track) { return core.playTrack(track); }
+  playTracks(tracks: Track[], startIndex = 0) { return core.playTracks(tracks, startIndex); }
 
-  async pause(): Promise<void> {
-    const response = await ipcService.pause();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to pause');
-    }
-  }
-
-  async stop(): Promise<void> {
-    const response = await ipcService.stop();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to stop');
-    }
-  }
-
-  async next(): Promise<void> {
-    const response = await ipcService.next();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to go to next');
-    }
-  }
-
-  async previous(): Promise<void> {
-    const response = await ipcService.previous();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to go to previous');
-    }
-  }
-
-  async seek(position: number): Promise<void> {
-    const response = await ipcService.seek(position);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to seek');
-    }
-  }
-
-  async setVolume(volume: number): Promise<void> {
-    const response = await ipcService.setVolume(volume);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to set volume');
-    }
-  }
-
-  async setPosition(position: number): Promise<void> {
-    const response = await ipcService.setPosition(position);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to set position');
-    }
-  }
-
-  async setRepeat(mode: 'off' | 'all' | 'one'): Promise<void> {
-    const response = await ipcService.setRepeat(mode);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to set repeat mode');
-    }
-  }
-
-  async setShuffle(enabled: boolean): Promise<void> {
-    const response = await ipcService.setShuffle(enabled);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to set shuffle');
-    }
+  async togglePlayPause() {
+    core.getState().isPlaying ? await core.pause() : await core.play();
   }
 
   async getState(): Promise<PlayerState> {
-    const response = await ipcService.getPlayerState();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to get player state');
-    }
-    return response.data!;
-  }
-
-  async addToQueue(trackIds: string[]): Promise<void> {
-    const response = await ipcService.addToQueue(trackIds);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to add to queue');
-    }
-  }
-
-  async clearQueue(): Promise<void> {
-    const response = await ipcService.clearQueue();
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to clear queue');
-    }
-  }
-
-  async removeFromQueue(index: number): Promise<void> {
-    const response = await ipcService.removeFromQueue(index);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to remove from queue');
-    }
-  }
-
-  async reorderQueue(fromIndex: number, toIndex: number): Promise<void> {
-    const response = await ipcService.reorderQueue(fromIndex, toIndex);
-    if (!response.success) {
-      throw new Error(response.error || 'Failed to reorder queue');
-    }
-  }
-
-  async playTrack(track: Track): Promise<void> {
-    await this.stop();
-    await this.addToQueue([track.id]);
-    await this.play();
-  }
-
-  async playTracks(tracks: Track[], startIndex = 0): Promise<void> {
-    await this.stop();
-    await this.clearQueue();
-    const trackIds = tracks.map(t => t.id);
-    await this.addToQueue(trackIds);
-    await this.setPosition(startIndex);
-    await this.play();
-  }
-
-  async togglePlayPause(): Promise<void> {
-    const state = await this.getState();
-    if (state.isPlaying) {
-      await this.pause();
-    } else {
-      await this.play();
-    }
+    const state = core.getState();
+    return {
+      isPlaying: state.isPlaying,
+      currentTrack: state.currentTrack?.track ?? null,
+      queue: state.queue.map(item => item.track),
+      position: state.position,
+      volume: state.volume,
+      repeatMode: state.repeatMode === 'one' ? 'one' : state.repeatMode,
+      shuffle: state.shuffle,
+    };
   }
 }
 
