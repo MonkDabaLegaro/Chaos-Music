@@ -1,5 +1,4 @@
 import type { LibraryScanner, MusicRepository } from '@chaos-music/contracts';
-import { AppError } from '../errors/AppError';
 import { LibraryService } from './LibraryService';
 
 const repository = (): jest.Mocked<MusicRepository> => ({
@@ -45,6 +44,6 @@ describe('LibraryService', () => {
     const scan = scanner();
     scan.scan.mockRejectedValue(new Error('denied'));
     const service = new LibraryService(repository(), scan);
-    await expect(service.scan('library')).rejects.toMatchObject<AppError>({ code: 'FILESYSTEM_PERMISSION' });
+    await expect(service.scan('library')).rejects.toMatchObject({ code: 'FILESYSTEM_PERMISSION' });
   });
 });
