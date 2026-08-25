@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@chaos-music/design-system": ["../design-system/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

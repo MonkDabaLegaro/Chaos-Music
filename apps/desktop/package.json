@@ -20,6 +20,8 @@
     "@chaos-music/adapters-desktop": "0.1.0",
     "@chaos-music/contracts": "0.1.0",
     "@chaos-music/core": "0.1.0",
+    "@chaos-music/design-system": "0.1.0",
+    "@chaos-music/ui": "0.1.0",
     "@emotion/react": "^11.13.5",
     "@emotion/styled": "^11.13.5",
     "@mui/icons-material": "^6.1.9",

@@ -1,108 +1,57 @@
-import { GlobalStyles as MuiGlobalStyles } from '@mui/material';
+import { chaosForestTokens as tokens } from '@chaos-music/design-system';
 
-export const globalStyles = (
-  <MuiGlobalStyles
-    styles={{
-      '*': {
-        margin: 0,
-        padding: 0,
-        boxSizing: 'border-box',
-      },
-      'html, body': {
-        height: '100%',
-        overflow: 'hidden',
-      },
-      '#root': {
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      },
-      '::-webkit-scrollbar': {
-        width: '8px',
-        height: '8px',
-      },
-      '::-webkit-scrollbar-track': {
-        background: 'transparent',
-      },
-      '::-webkit-scrollbar-thumb': {
-        background: 'rgba(255, 255, 255, 0.2)',
-        borderRadius: '4px',
-      },
-      '::-webkit-scrollbar-thumb:hover': {
-        background: 'rgba(255, 255, 255, 0.3)',
-      },
-      a: {
-        color: 'inherit',
-        textDecoration: 'none',
-      },
-      button: {
-        border: 'none',
-        outline: 'none',
-        background: 'none',
-        cursor: 'pointer',
-      },
-      input: {
-        outline: 'none',
-      },
-      '.spotify-green': {
-        color: '#1DB954',
-      },
-      '.hover-scale': {
-        transition: 'transform 0.2s ease-in-out',
-        '&:hover': {
-          transform: 'scale(1.05)',
-        },
-      },
-      '.hover-lift': {
-        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
-        },
-      },
-      '.text-gradient': {
-        background: 'linear-gradient(45deg, #1DB954, #1ed760)',
-        '-webkit-background-clip': 'text',
-        '-webkit-text-fill-color': 'transparent',
-        backgroundClip: 'text',
-      },
-      '@keyframes pulse': {
-        '0%, 100%': {
-          opacity: 1,
-        },
-        '50%': {
-          opacity: 0.5,
-        },
-      },
-      '@keyframes slideUp': {
-        '0%': {
-          opacity: 0,
-          transform: 'translateY(20px)',
-        },
-        '100%': {
-          opacity: 1,
-          transform: 'translateY(0)',
-        },
-      },
-      '@keyframes fadeIn': {
-        '0%': {
-          opacity: 0,
-        },
-        '100%': {
-          opacity: 1,
-        },
-      },
-      '.animate-pulse': {
-        animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      },
-      '.animate-slide-up': {
-        animation: 'slideUp 0.3s ease-out',
-      },
-      '.animate-fade-in': {
-        animation: 'fadeIn 0.3s ease-out',
-      },
-    }}
-  />
-);
+export const chaosGlobalStyles = {
+  '*': {
+    boxSizing: 'border-box' as const,
+  },
+  'html, body, #root': {
+    margin: 0,
+    minHeight: '100%',
+    height: '100%',
+  },
+  body: {
+    overflow: 'hidden',
+    backgroundColor: tokens.color.background.deep,
+    color: tokens.color.text.primary,
+    fontFamily: tokens.typography.sans,
+  },
+  '#root': {
+    display: 'flex',
+    flexDirection: 'column' as const,
+  },
+  '::selection': {
+    backgroundColor: tokens.color.forest[700],
+    color: tokens.color.text.primary,
+  },
+  '::-webkit-scrollbar': {
+    width: '8px',
+    height: '8px',
+  },
+  '::-webkit-scrollbar-track': {
+    backgroundColor: tokens.color.background.deep,
+  },
+  '::-webkit-scrollbar-thumb': {
+    backgroundColor: tokens.color.forest[900],
+    borderRadius: `${tokens.radius.round}px`,
+    border: `2px solid ${tokens.color.background.deep}`,
+  },
+  '::-webkit-scrollbar-thumb:hover': {
+    backgroundColor: tokens.color.forest[700],
+  },
+  a: { color: 'inherit', textDecoration: 'none' },
+  '.technical-meta': {
+    fontFamily: tokens.typography.mono,
+    color: tokens.color.text.secondary,
+    letterSpacing: '0.04em',
+    fontSize: '0.75rem',
+  },
+  '.signal-accent': { color: tokens.color.accent.signal },
+  '.text-gradient': {
+    background: `linear-gradient(90deg, ${tokens.color.accent.moss}, ${tokens.color.accent.signal})`,
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+  },
+};
 
-export default globalStyles;
+export default chaosGlobalStyles;
