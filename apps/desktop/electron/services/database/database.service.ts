@@ -184,7 +184,7 @@ class DatabaseService {
       );
     `;
 
-    this.db.exec(schema);
+    this.db!.exec(schema);
   }
 
   /**
@@ -462,7 +462,6 @@ class DatabaseService {
       params.push(searchTerm, searchTerm, searchTerm);
     }
 
-    // Count query
     const countStmt = this.db!.prepare(`
       SELECT COUNT(*) as total
       FROM tracks t
@@ -472,12 +471,9 @@ class DatabaseService {
     `);
     const { total } = countStmt.get(...params) as { total: number };
 
-    // Order by
     const orderBy = filter?.order_by || 't.date_added';
     const orderDir = filter?.order_dir || 'DESC';
     const orderClause = `ORDER BY ${orderBy} ${orderDir}`;
-
-    // Limit and offset
     const limit = filter?.limit || 100;
     const offset = filter?.offset || 0;
 
@@ -496,7 +492,6 @@ class DatabaseService {
     `);
 
     const tracks = stmt.all(...params, limit, offset) as TrackWithDetails[];
-
     return { tracks, total };
   }
 
@@ -805,7 +800,6 @@ class DatabaseService {
     `);
     const result = stmt.run(track_id, completed, progress);
     
-    // Update recently played
     const existing = this.db!.prepare('SELECT * FROM recently_played WHERE track_id = ?').get(track_id);
     if (existing) {
       this.db!.prepare('UPDATE recently_played SET last_played = CURRENT_TIMESTAMP WHERE track_id = ?').run(track_id);
@@ -948,5 +942,4 @@ class DatabaseService {
   }
 }
 
-// Exportar instancia singleton
 export const databaseService = new DatabaseService();
