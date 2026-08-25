@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import type { QueueItem, Track } from '../../../shared/types';
+import type { QueueItem, Track } from '@shared/types';
 import { playerService } from '../services/player.service';
 import { useAppDispatch, useAppSelector } from '../store';
 import { addQueueItems, clearQueue, nextItem, previousItem, removeQueueItem, reorderQueueItems, setCurrentIndex, setExpanded, toggleExpanded } from '../store/slices/queue.slice';
@@ -7,7 +7,6 @@ import { addQueueItems, clearQueue, nextItem, previousItem, removeQueueItem, reo
 export function useQueue() {
   const dispatch = useAppDispatch();
   const { items, currentIndex, isExpanded } = useAppSelector((state) => state.queue);
-
   const currentTrack = items[currentIndex]?.track || null;
 
   const addToQueue = useCallback(async (tracks: Track | Track[]) => {
@@ -18,68 +17,54 @@ export function useQueue() {
       position: items.length + index,
       addedAt: new Date().toISOString(),
     }));
-    
+
     dispatch(addQueueItems(queueItems));
-    
+
     try {
-      await playerService.addToQueue(trackList.map(t => t.id));
-    } catch (err) {
-      console.error('Failed to add to queue:', err);
+      await playerService.addToQueue(trackList);
+    } catch (error) {
+      console.error('Failed to add to queue:', error);
     }
   }, [dispatch, items.length]);
 
   const removeFromQueue = useCallback(async (itemId: string) => {
-    const index = items.findIndex(item => item.id === itemId);
-    if (index !== -1) {
-      dispatch(removeQueueItem(itemId));
-      
-      try {
-        await playerService.removeFromQueue(index);
-      } catch (err) {
-        console.error('Failed to remove from queue:', err);
-      }
+    const index = items.findIndex((item) => item.id === itemId);
+    if (index === -1) return;
+
+    dispatch(removeQueueItem(itemId));
+    try {
+      await playerService.removeFromQueue(index);
+    } catch (error) {
+      console.error('Failed to remove from queue:', error);
     }
   }, [dispatch, items]);
 
   const reorder = useCallback(async (fromIndex: number, toIndex: number) => {
     dispatch(reorderQueueItems({ fromIndex, toIndex }));
-    
     try {
       await playerService.reorderQueue(fromIndex, toIndex);
-    } catch (err) {
-      console.error('Failed to reorder queue:', err);
+    } catch (error) {
+      console.error('Failed to reorder queue:', error);
     }
   }, [dispatch]);
 
   const clear = useCallback(async () => {
     dispatch(clearQueue());
-    
     try {
       await playerService.clearQueue();
-    } catch (err) {
-      console.error('Failed to clear queue:', err);
+    } catch (error) {
+      console.error('Failed to clear queue:', error);
     }
   }, [dispatch]);
 
-  const goToIndex = useCallback(async (index: number) => {
+  const goToIndex = useCallback((index: number) => {
     dispatch(setCurrentIndex(index));
   }, [dispatch]);
 
-  const next = useCallback(() => {
-    dispatch(nextItem());
-  }, [dispatch]);
-
-  const previous = useCallback(() => {
-    dispatch(previousItem());
-  }, [dispatch]);
-
-  const toggleExpandedView = useCallback(() => {
-    dispatch(toggleExpanded());
-  }, [dispatch]);
-
-  const setExpandedView = useCallback((expanded: boolean) => {
-    dispatch(setExpanded(expanded));
-  }, [dispatch]);
+  const next = useCallback(() => dispatch(nextItem()), [dispatch]);
+  const previous = useCallback(() => dispatch(previousItem()), [dispatch]);
+  const toggleExpandedView = useCallback(() => dispatch(toggleExpanded()), [dispatch]);
+  const setExpandedView = useCallback((expanded: boolean) => dispatch(setExpanded(expanded)), [dispatch]);
 
   return {
     queueItems: items,

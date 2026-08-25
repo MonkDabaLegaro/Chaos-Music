@@ -1,70 +1,70 @@
 import ClearIcon from '@mui/icons-material/Clear';
 import SearchIcon from '@mui/icons-material/Search';
 import { IconButton, InputAdornment, TextField } from '@mui/material';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 interface SearchInputProps {
   value?: string;
   placeholder?: string;
   onChange?: (value: string) => void;
+  onSubmit?: (value: string) => void | Promise<void>;
   onClear?: () => void;
   fullWidth?: boolean;
   size?: 'small' | 'medium';
+  autoFocus?: boolean;
 }
 
 const SearchInput: React.FC<SearchInputProps> = ({
-  value: initialValue = '',
+  value,
   placeholder = 'Buscar...',
   onChange,
+  onSubmit,
   onClear,
   fullWidth = true,
   size = 'medium',
+  autoFocus = false,
 }) => {
-  const [localValue, setLocalValue] = useState(initialValue);
+  const [localValue, setLocalValue] = useState(value ?? '');
+  const controlled = value !== undefined;
+  const currentValue = controlled ? value : localValue;
 
-  const value = initialValue !== undefined ? initialValue : localValue;
+  useEffect(() => {
+    if (controlled) setLocalValue(value ?? '');
+  }, [controlled, value]);
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = event.target.value;
-    if (initialValue === undefined) {
-      setLocalValue(newValue);
-    }
-    onChange?.(newValue);
+  const updateValue = (next: string) => {
+    if (!controlled) setLocalValue(next);
+    onChange?.(next);
   };
 
   const handleClear = () => {
-    if (initialValue === undefined) {
-      setLocalValue('');
-    }
-    onChange?.('');
+    updateValue('');
     onClear?.();
   };
 
   return (
     <TextField
       fullWidth={fullWidth}
-      value={value}
+      value={currentValue}
       placeholder={placeholder}
-      onChange={handleChange}
+      onChange={(event) => updateValue(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') void onSubmit?.(currentValue);
+      }}
+      autoFocus={autoFocus}
       size={size}
       InputProps={{
         startAdornment: (
-          <InputAdornment position="start">
-            <SearchIcon sx={{ color: 'text.secondary' }} />
-          </InputAdornment>
+          <InputAdornment position="start"><SearchIcon sx={{ color: 'text.secondary' }} /></InputAdornment>
         ),
-        endAdornment: value && (
+        endAdornment: currentValue ? (
           <InputAdornment position="end">
-            <IconButton size="small" onClick={handleClear}>
-              <ClearIcon fontSize="small" />
-            </IconButton>
+            <IconButton size="small" onClick={handleClear} aria-label="Limpiar búsqueda"><ClearIcon fontSize="small" /></IconButton>
           </InputAdornment>
-        ),
+        ) : undefined,
         sx: {
           bgcolor: 'background.elevated',
-          '&:hover': {
-            bgcolor: 'background.highlight',
-          },
+          '&:hover': { bgcolor: 'background.highlight' },
         },
       }}
     />

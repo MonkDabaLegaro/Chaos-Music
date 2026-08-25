@@ -1,6 +1,5 @@
 import { PlayerService as CorePlayerService } from '@chaos-music/core';
-import type { Track } from '../../../shared/types';
-import type { PlayerState } from '../../../shared/types';
+import type { PlayerState, Track } from '@shared/types';
 import { WebAudioEngine } from '../platform/WebAudioEngine';
 
 export interface PlayerService {
@@ -55,7 +54,7 @@ class PlayerServiceImpl implements PlayerService {
     return {
       isPlaying: state.isPlaying,
       currentTrack: state.currentTrack?.track ?? null,
-      queue: state.queue.map(item => item.track),
+      queue: state.queue.map((item) => item.track),
       position: state.position,
       volume: state.volume,
       repeatMode: state.repeatMode === 'one' ? 'one' : state.repeatMode,
