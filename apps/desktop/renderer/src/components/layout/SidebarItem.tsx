@@ -15,47 +15,29 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
   path,
   selected = false,
   onClick,
-}) => {
-  return (
-    <ListItemButton
-      selected={selected}
-      onClick={onClick}
-      sx={{
-        borderRadius: '4px',
-        mb: 0.5,
-        '&.Mui-selected': {
-          bgcolor: 'rgba(29, 185, 84, 0.1)',
-          '&:hover': {
-            bgcolor: 'rgba(29, 185, 84, 0.2)',
-          },
-          '& .MuiListItemIcon-root': {
-            color: 'primary.main',
-          },
-          '& .MuiListItemText-primary': {
-            color: 'primary.main',
-            fontWeight: 600,
-          },
-        },
-        '&:hover': {
-          bgcolor: 'rgba(255, 255, 255, 0.1)',
-        },
-      }}
-    >
-      <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-        {icon}
-      </ListItemIcon>
-      <ListItemText
-        primary={label}
-        primaryTypographyProps={{
-          noWrap: true,
-          sx: {
-            color: 'inherit',
-            fontSize: '0.875rem',
-          },
-        }}
-      />
-    </ListItemButton>
-  );
-};
+}) => (
+  <ListItemButton
+    data-path={path}
+    selected={selected}
+    onClick={onClick}
+    sx={{
+      borderRadius: '4px',
+      mb: 0.5,
+      '&.Mui-selected': {
+        bgcolor: 'rgba(39, 115, 76, 0.14)',
+        '&:hover': { bgcolor: 'rgba(39, 115, 76, 0.22)' },
+        '& .MuiListItemIcon-root': { color: 'primary.main' },
+        '& .MuiListItemText-primary': { color: 'primary.main', fontWeight: 600 },
+      },
+      '&:hover': { bgcolor: 'rgba(255, 255, 255, 0.06)' },
+    }}
+  >
+    <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>{icon}</ListItemIcon>
+    <ListItemText
+      primary={label}
+      primaryTypographyProps={{ noWrap: true, sx: { color: 'inherit', fontSize: '0.875rem' } }}
+    />
+  </ListItemButton>
+);
 
 export default SidebarItem;
