@@ -9,13 +9,13 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @chaos-music/desktop",
-    "build": "npm run build --workspace @chaos-music/desktop",
+    "build": "npm run build --workspace @chaos-music/desktop && npm run typecheck --workspaces --if-present",
     "build:all": "npm run build:all --workspace @chaos-music/desktop",
     "preview": "npm run preview --workspace @chaos-music/desktop",
     "lint": "npm run lint --workspace @chaos-music/desktop",
     "format": "npm run format --workspace @chaos-music/desktop",
-    "typecheck": "npm run typecheck --workspace @chaos-music/desktop",
-    "test": "npm run test --workspace @chaos-music/desktop",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "test:watch": "npm run test:watch --workspace @chaos-music/desktop",
     "test:coverage": "npm run test:coverage --workspace @chaos-music/desktop"
   },

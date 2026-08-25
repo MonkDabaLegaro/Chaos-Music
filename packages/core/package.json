@@ -1,0 +1,14 @@
+{
+  "name": "@chaos-music/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@chaos-music/contracts": "0.1.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "jest --config ../../jest.config.js --rootDir ../.. packages/core"
+  }
+}
