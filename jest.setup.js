@@ -1,9 +1,5 @@
-/**
- * Jest Setup Configuration
- * Configuración global para las pruebas unitarias
- */
+require('@testing-library/jest-dom');
 
-// Mock para Electron
 jest.mock('electron', () => ({
   app: {
     getPath: jest.fn((type) => {
@@ -15,9 +11,7 @@ jest.mock('electron', () => ({
     whenReady: jest.fn(() => Promise.resolve()),
   },
   BrowserWindow: jest.fn().mockImplementation(() => ({
-    webContents: {
-      send: jest.fn(),
-    },
+    webContents: { send: jest.fn() },
     loadURL: jest.fn(),
     show: jest.fn(),
     hide: jest.fn(),
@@ -41,12 +35,9 @@ jest.mock('electron', () => ({
     setApplicationMenu: jest.fn(),
   },
   Tray: jest.fn(),
-  nativeTheme: {
-    themeSource: 'system',
-  },
+  nativeTheme: { themeSource: 'system' },
 }));
 
-// Mock para node:crypto
 jest.mock('node:crypto', () => ({
   createHash: jest.fn().mockReturnValue({
     update: jest.fn().mockReturnThis(),
@@ -55,13 +46,9 @@ jest.mock('node:crypto', () => ({
   randomBytes: jest.fn().mockReturnValue('mock-bytes'),
 }));
 
-// Mock para node:fs/promises
 jest.mock('node:fs/promises', () => ({
   readdir: jest.fn().mockResolvedValue([]),
-  stat: jest.fn().mockResolvedValue({
-    mtime: new Date(),
-    size: 1024,
-  }),
+  stat: jest.fn().mockResolvedValue({ mtime: new Date(), size: 1024 }),
   open: jest.fn().mockResolvedValue({
     read: jest.fn().mockResolvedValue({ bytesRead: 0 }),
     close: jest.fn().mockResolvedValue(undefined),
@@ -73,9 +60,8 @@ jest.mock('node:fs/promises', () => ({
   rmdir: jest.fn().mockResolvedValue(undefined),
 }));
 
-// Mock para better-sqlite3
 jest.mock('better-sqlite3', () => {
-  return jest.fn().mockImplementation(() => ({
+  const DatabaseMock = jest.fn().mockImplementation(() => ({
     pragma: jest.fn(),
     exec: jest.fn(),
     prepare: jest.fn().mockReturnValue({
@@ -85,23 +71,20 @@ jest.mock('better-sqlite3', () => {
     }),
     close: jest.fn(),
   }));
+  return { __esModule: true, default: DatabaseMock };
 });
 
-// Mock para uuid
 jest.mock('uuid', () => ({
   v4: jest.fn().mockReturnValue('mock-uuid-1234'),
 }));
 
-// Configurar timer mocks
 jest.useFakeTimers();
 
-// Setup global después de cada prueba
 afterEach(() => {
   jest.clearAllMocks();
   jest.clearAllTimers();
 });
 
-// Configurar cleanup global
 afterAll(() => {
   jest.restoreAllMocks();
 });
