@@ -321,7 +321,7 @@ class YouTubeService {
         .audioFrequency(options.sampleRate)
         .audioChannels(2)
         .format(options.format)
-        .on('end', resolve)
+        .on('end', () => resolve())
         .on('error', reject)
         .save(outputPath);
     });
