@@ -1,6 +1,11 @@
-/**
- * Pruebas Unitarias para YouTubeService
- */
+import youtubedl from 'youtube-dl-exec';
+
+jest.mock('youtube-dl-exec', () => ({
+  __esModule: true,
+  default: jest.fn(),
+}));
+
+const mockYoutubeDl = youtubedl as unknown as jest.Mock;
 
 describe('YouTubeService', () => {
   let youtubeService: typeof import('../youtube.service').youtubeService;
@@ -8,108 +13,100 @@ describe('YouTubeService', () => {
   beforeEach(() => {
     jest.resetModules();
     jest.clearAllMocks();
-
-    // Importar el servicio
+    mockYoutubeDl.mockReset();
     youtubeService = require('../youtube.service').youtubeService;
   });
 
-  describe('searchVideos', () => {
-    it('debería buscar videos correctamente', async () => {
-      const results = await youtubeService.searchVideos('test query');
+  it('devuelve una búsqueda vacía sin invocar el proveedor', async () => {
+    await expect(youtubeService.search({ query: '   ' })).resolves.toEqual({
+      videos: [],
+      nextPageToken: null,
+      totalResults: 0,
+      estimatedResults: 0,
+    });
+    expect(mockYoutubeDl).not.toHaveBeenCalled();
+  });
 
-      expect(results).toBeDefined();
-      // Los resultados dependen de la API real
+  it('mapea resultados de búsqueda del proveedor al contrato de dominio', async () => {
+    mockYoutubeDl.mockResolvedValue({
+      entries: [{
+        id: 'video-1',
+        title: 'Forest Track',
+        uploader: 'Chaos Channel',
+        duration: 125,
+        view_count: 42,
+        thumbnail: 'https://example.test/thumb.jpg',
+      }],
     });
 
-    it('debería manejar errores de búsqueda', async () => {
-      // Mock de error
-      await expect(youtubeService.searchVideos('')).rejects.toThrow();
+    const result = await youtubeService.search({ query: 'forest', maxResults: 5 });
+
+    expect(result.totalResults).toBe(1);
+    expect(result.videos[0]).toMatchObject({
+      id: 'video-1',
+      title: 'Forest Track',
+      channelTitle: 'Chaos Channel',
+      duration: 125,
+      durationString: '2:05',
+      viewCount: 42,
+    });
+    expect(mockYoutubeDl).toHaveBeenCalledWith(
+      'ytsearch5:forest',
+      expect.objectContaining({ dumpSingleJson: true, simulate: true }),
+      expect.objectContaining({ timeout: 30000 }),
+    );
+  });
+
+  it('obtiene y normaliza los detalles de un video', async () => {
+    mockYoutubeDl.mockResolvedValue({
+      id: 'video-2',
+      title: 'Details',
+      channel: 'Channel',
+      duration: 3601,
+      tags: ['music'],
+      categories: ['Music'],
+    });
+
+    const video = await youtubeService.getVideo('video-2');
+
+    expect(video).toMatchObject({
+      id: 'video-2',
+      title: 'Details',
+      channelTitle: 'Channel',
+      durationString: '1:00:01',
+      tags: ['music'],
+      categoryId: 'Music',
     });
   });
 
-  describe('getVideoDetails', () => {
-    it('debería obtener detalles del video', async () => {
-      const videoId = 'dQw4w9WgXcQ';
-      const details = await youtubeService.getVideoDetails(videoId);
-
-      expect(details).toBeDefined();
+  it('mapea los items de una playlist sin red real', async () => {
+    mockYoutubeDl.mockResolvedValue({
+      entries: [{
+        id: 'track-1',
+        title: 'Playlist Track',
+        uploader: 'Channel',
+        duration: 90,
+      }],
     });
 
-    it('debería lanzar error para ID inválido', async () => {
-      await expect(youtubeService.getVideoDetails('')).rejects.toThrow();
-    });
+    const items = await youtubeService.getPlaylistItems('playlist-1');
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        playlistId: 'playlist-1',
+        videoId: 'track-1',
+        title: 'Playlist Track',
+        duration: 90,
+      }),
+    ]);
   });
 
-  describe('searchPlaylists', () => {
-    it('debería buscar playlists', async () => {
-      const results = await youtubeService.searchPlaylists('rock music');
+  it('clasifica errores del proveedor en el contrato YouTubeError', async () => {
+    mockYoutubeDl.mockRejectedValue(new Error('network timeout'));
 
-      expect(results).toBeDefined();
-    });
-  });
-
-  describe('getPlaylistTracks', () => {
-    it('debería obtener tracks de una playlist', async () => {
-      const playlistId = 'PL123456789';
-      const tracks = await youtubeService.getPlaylistTracks(playlistId);
-
-      expect(tracks).toBeDefined();
-    });
-  });
-
-  describe('extractVideoId', () => {
-    it('debería extraer ID de URL de YouTube', () => {
-      const url = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
-      const videoId = youtubeService.extractVideoId(url);
-
-      expect(videoId).toBe('dQw4w9WgXcQ');
-    });
-
-    it('debería extraer ID de URL corta', () => {
-      const url = 'https://youtu.be/dQw4w9WgXcQ';
-      const videoId = youtubeService.extractVideoId(url);
-
-      expect(videoId).toBe('dQw4w9WgXcQ');
-    });
-
-    it('debería retornar null para URL inválida', () => {
-      const url = 'https://example.com/video';
-      const videoId = youtubeService.extractVideoId(url);
-
-      expect(videoId).toBeNull();
-    });
-  });
-
-  describe('parseDuration', () => {
-    it('debería parsear duración en formato ISO', () => {
-      const duration = youtubeService.parseDuration('PT4M30S');
-
-      expect(duration).toBe(270); // 4*60 + 30
-    });
-
-    it('debería parsear duración con horas', () => {
-      const duration = youtubeService.parseDuration('PT1H2M30S');
-
-      expect(duration).toBe(3750); // 3600 + 120 + 30
-    });
-
-    it('debería retornar 0 para duración inválida', () => {
-      const duration = youtubeService.parseDuration('invalid');
-
-      expect(duration).toBe(0);
-    });
-  });
-
-  describe('isYouTubeUrl', () => {
-    it('debería reconocer URLs de YouTube', () => {
-      expect(youtubeService.isYouTubeUrl('https://youtube.com/watch?v=123')).toBe(true);
-      expect(youtubeService.isYouTubeUrl('https://youtu.be/123')).toBe(true);
-      expect(youtubeService.isYouTubeUrl('https://music.youtube.com/watch?v=123')).toBe(true);
-    });
-
-    it('debería rechazar URLs que no son de YouTube', () => {
-      expect(youtubeService.isYouTubeUrl('https://vimeo.com/123')).toBe(false);
-      expect(youtubeService.isYouTubeUrl('https://example.com/video')).toBe(false);
+    await expect(youtubeService.search({ query: 'failure' })).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      recoverable: true,
     });
   });
 });
