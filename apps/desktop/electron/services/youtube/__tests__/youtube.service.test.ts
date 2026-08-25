@@ -1,4 +1,5 @@
 import youtubedl from 'youtube-dl-exec';
+import { youtubeService } from '../youtube.service';
 
 jest.mock('youtube-dl-exec', () => ({
   __esModule: true,
@@ -8,13 +9,9 @@ jest.mock('youtube-dl-exec', () => ({
 const mockYoutubeDl = youtubedl as unknown as jest.Mock;
 
 describe('YouTubeService', () => {
-  let youtubeService: typeof import('../youtube.service').youtubeService;
-
   beforeEach(() => {
-    jest.resetModules();
     jest.clearAllMocks();
     mockYoutubeDl.mockReset();
-    youtubeService = require('../youtube.service').youtubeService;
   });
 
   it('devuelve una búsqueda vacía sin invocar el proveedor', async () => {
