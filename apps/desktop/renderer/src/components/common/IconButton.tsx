@@ -1,4 +1,5 @@
 import { IconButton as MuiIconButton, IconButtonProps as MuiIconButtonProps } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material/styles';
 import React from 'react';
 
 interface IconButtonProps extends Omit<MuiIconButtonProps, 'color'> {
@@ -15,44 +16,32 @@ const IconButton: React.FC<IconButtonProps> = ({
   children,
   ...props
 }) => {
-  const getColor = () => {
-    if (color === 'white') {
-      return active ? 'primary.main' : 'text.primary';
-    }
-    return color;
-  };
+  const resolvedColor = color === 'white'
+    ? (active ? 'primary.main' : 'text.primary')
+    : color;
 
-  const customSx = {
-    color: getColor(),
+  const baseSx: SxProps<Theme> = {
+    color: active ? 'primary.main' : resolvedColor,
     transition: 'all 0.2s ease-in-out',
     ...(size === 'small' && {
       width: 32,
       height: 32,
-      '& .MuiSvgIcon-root': {
-        fontSize: 20,
-      },
+      '& .MuiSvgIcon-root': { fontSize: 20 },
     }),
     ...(size === 'large' && {
       width: 56,
       height: 56,
-      '& .MuiSvgIcon-root': {
-        fontSize: 32,
-      },
+      '& .MuiSvgIcon-root': { fontSize: 32 },
     }),
-    ...(active && {
-      color: 'primary.main',
-    }),
-    ...sx,
     '&:hover': {
       bgcolor: 'rgba(255, 255, 255, 0.1)',
-      ...(sx as object)?.['&:hover'],
     },
   };
 
   return (
     <MuiIconButton
       size={size}
-      sx={customSx}
+      sx={[baseSx, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])]}
       {...props}
     >
       {children}
