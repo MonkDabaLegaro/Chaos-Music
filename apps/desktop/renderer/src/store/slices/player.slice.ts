@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import type { PlayerState, Track } from '../../../shared/types';
+import type { PlayerState, Track } from '@shared/types';
 
 const initialState: PlayerState = {
   isPlaying: false,
