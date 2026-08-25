@@ -1,8 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-// Custom types for exposed API
-interface ElectronAPI {
-  // Window controls
+export interface ElectronAPI {
   window: {
     minimize: () => void;
     maximize: () => void;
@@ -10,33 +8,27 @@ interface ElectronAPI {
     isMaximized: () => boolean;
     on: (event: string, callback: () => void) => void;
   };
-  // IPC invoke wrapper
-  invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
-  // IPC on wrapper
+  invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>;
   on: (channel: string, callback: (...args: unknown[]) => void) => void;
-  // IPC off wrapper
-  off: (channel: string, callback: (...args: unknown[]) => void) => void;
+  off: (channel: string, callback?: (...args: unknown[]) => void) => void;
+  send: (channel: string, ...args: unknown[]) => void;
 }
 
-// Exposed API to renderer process
 const api: ElectronAPI = {
   window: {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
-    isMaximized: () => ipcRenderer.sendSync('window:isMaximized'),
-    on: (event, callback) => ipcRenderer.on(`window:${event}`, callback),
+    isMaximized: () => ipcRenderer.sendSync('window:isMaximized') as boolean,
+    on: (event, callback) => { ipcRenderer.on(`window:${event}`, callback); },
   },
   invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
-  on: (channel, callback) => ipcRenderer.on(channel, callback),
-  off: (channel, callback) => ipcRenderer.off(channel, callback),
+  on: (channel, callback) => { ipcRenderer.on(channel, (_event, ...args) => callback(...args)); },
+  off: (channel) => { ipcRenderer.removeAllListeners(channel); },
+  send: (channel, ...args) => ipcRenderer.send(channel, ...args),
 };
 
+// `electronAPI` is the canonical renderer bridge. `electron` remains as a
+// compatibility alias for components written against the first prototype.
+contextBridge.exposeInMainWorld('electronAPI', api);
 contextBridge.exposeInMainWorld('electron', api);
-
-// Type declarations for renderer
-declare global {
-  interface Window {
-    electron: ElectronAPI;
-  }
-}

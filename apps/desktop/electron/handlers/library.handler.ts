@@ -1,457 +1,130 @@
-/**
- * Handlers IPC para la gestión de biblioteca musical local
- */
-
-import path from 'node:path';
-import { databaseService } from '../services/database/database.service';
-import type { TrackFilter } from '../services/database/types';
-import { fileScannerService } from '../services/fileScanner/scanner.service';
+import type { TrackFilter } from '@chaos-music/contracts';
+import { desktopApplication } from '../composition/createDesktopApplication';
 import { registerHandler } from '../utils/ipc';
 
-// Inicializar la base de datos al cargar el módulo
-databaseService.initialize();
+const { library, legacyDatabase } = desktopApplication;
 
-/**
- * Escanear biblioteca(s) de música
- */
-registerHandler('library:scan', async (_event, libraryId: string) => {
-  try {
-    const result = await fileScannerService.scanLibrary(libraryId);
-    return { success: true, result };
-  } catch (error) {
-    console.error('Error escaneando biblioteca:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Error desconocido' 
-    };
+type Handler = (...args: unknown[]) => Promise<unknown> | unknown;
+
+function registerAliases(channels: string[], handler: Handler) {
+  for (const channel of channels) {
+    registerHandler(channel, async (_event, ...args) => handler(...args));
   }
-});
+}
 
-/**
- * Obtener estado del escaneo
- */
-registerHandler('library:getScanStatus', async () => {
-  return fileScannerService.getScanStatus();
-});
+function message(error: unknown) {
+  return error instanceof Error ? error.message : 'Error desconocido';
+}
 
-/**
- * Cancelar escaneo en progreso
- */
-registerHandler('library:cancelScan', async () => {
-  fileScannerService.cancelScan();
-  return { success: true };
-});
-
-/**
- * Obtener lista de canciones con filtros
- */
-registerHandler('library:getTracks', async (_event, filter?: TrackFilter) => {
+async function transport<T>(operation: () => Promise<T> | T, fallback?: T) {
   try {
-    const result = databaseService.getAllTracks(filter);
-    return { success: true, ...result };
+    const data = await operation();
+    return { success: true, data };
   } catch (error) {
-    console.error('Error obteniendo canciones:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Error desconocido',
-      tracks: [],
-      total: 0
-    };
+    console.error('[library IPC]', error);
+    return { success: false, data: fallback, error: message(error) };
   }
+}
+
+registerAliases(['library:scan'], async (libraryIdOrPath) => {
+  return transport(async () => {
+    const value = String(libraryIdOrPath ?? '');
+    const folders = await library.getLibraries();
+    let target = folders.find(folder => folder.id === value || folder.path === value);
+    if (!target) target = await library.addLibrary(value);
+    const result = await library.scan(target.id);
+    return { ...result, trackCount: result.addedTracks + result.updatedTracks };
+  });
 });
 
-/**
- * Obtener canción por ID
- */
-registerHandler('library:getTrack', async (_event, trackId: string) => {
-  try {
-    const track = databaseService.getTrackById(trackId);
-    return { success: true, track };
-  } catch (error) {
-    console.error('Error obteniendo canción:', error);
-    return { success: false, track: null };
-  }
+registerAliases(['library:getScanStatus', 'library:get-scan-status'], () => transport(() => library.getScanStatus()));
+registerAliases(['library:cancelScan', 'library:cancel-scan'], () => transport(() => { library.cancelScan(); }));
+
+registerAliases(['library:getTracks', 'library:get-tracks'], (filter) => transport(async () => {
+  const result = await library.getTracks(filter as TrackFilter | undefined);
+  return result.tracks;
+}, []));
+registerAliases(['library:getTrack', 'library:get-track'], (trackId) => transport(() => library.getTrack(String(trackId ?? '')), null));
+registerAliases(['library:getArtists', 'library:get-artists'], () => transport(() => library.getArtists(), []));
+registerAliases(['library:getAlbums', 'library:get-albums'], (value) => {
+  const artistId = typeof value === 'string'
+    ? value
+    : typeof value === 'object' && value && 'artistId' in value
+      ? String((value as { artistId?: unknown }).artistId ?? '') || undefined
+      : undefined;
+  return transport(() => library.getAlbums(artistId), []);
+});
+registerAliases(['library:getGenres', 'library:get-genres'], () => transport(() => library.getGenres(), []));
+registerAliases(['library:search'], (query) => transport(() => library.search(String(query ?? '')), { tracks: [], artists: [], albums: [] }));
+registerAliases(['library:getFavorites', 'library:get-favorites'], () => transport(() => library.getFavorites(), []));
+registerAliases(['library:toggleFavorite', 'library:toggle-favorite'], (trackId) => transport(() => library.toggleFavorite(String(trackId ?? ''))));
+registerAliases(['library:getRecentlyPlayed', 'library:get-recently-played'], (limit) => transport(() => library.getRecentlyPlayed(typeof limit === 'number' ? limit : undefined), []));
+
+registerAliases(['library:addFolder', 'library:add-folder'], (pathOrInput, name) => {
+  const path = typeof pathOrInput === 'string' ? pathOrInput : String((pathOrInput as { path?: unknown } | undefined)?.path ?? '');
+  const resolvedName = typeof name === 'string' ? name : typeof pathOrInput === 'object' && pathOrInput ? String((pathOrInput as { name?: unknown }).name ?? '') || undefined : undefined;
+  return transport(() => library.addLibrary(path, resolvedName));
+});
+registerAliases(['library:removeFolder', 'library:remove-folder'], (libraryId) => transport(() => library.removeLibrary(String(libraryId ?? ''))));
+registerAliases(['library:getFolders', 'library:get-folders'], () => transport(() => library.getLibraries(), []));
+registerAliases(['library:updateLibrary', 'library:update-library'], (libraryId, input) => {
+  const data = (input ?? {}) as { name?: string; path?: string; is_active?: number; isActive?: boolean };
+  return transport(() => library.updateLibrary(String(libraryId ?? ''), {
+    name: data.name,
+    path: data.path,
+    isActive: data.isActive ?? (data.is_active === undefined ? undefined : Boolean(data.is_active)),
+  }));
 });
 
-/**
- * Obtener artistas
- */
-registerHandler('library:getArtists', async () => {
-  try {
-    const artists = databaseService.getAllArtists();
-    return { success: true, artists, total: artists.length };
-  } catch (error) {
-    console.error('Error obteniendo artistas:', error);
-    return { success: false, artists: [], total: 0 };
-  }
+// Transitional persistence façade. These channels remain supported while
+// playlists, queue, metadata editing and statistics are extracted into core.
+registerAliases(['library:getStats', 'library:get-stats'], () => transport(() => legacyDatabase.getLibraryStats(), null));
+registerAliases(['library:deleteTrack', 'library:delete-track'], (trackId) => transport(() => legacyDatabase.deleteTrack(String(trackId ?? ''))));
+registerAliases(['library:updateTrack', 'library:update-track'], (trackOrPayload, maybeData) => {
+  const payload = typeof trackOrPayload === 'object' && trackOrPayload
+    ? trackOrPayload as { trackId?: unknown; updates?: Record<string, unknown> }
+    : undefined;
+  const trackId = payload ? String(payload.trackId ?? '') : String(trackOrPayload ?? '');
+  const updates = payload?.updates ?? (maybeData as Record<string, unknown> | undefined) ?? {};
+  return transport(() => legacyDatabase.updateTrack(trackId, updates), null);
 });
 
-/**
- * Obtener álbum por ID
- */
-registerHandler('library:getAlbum', async (_event, albumId: string) => {
-  try {
-    const album = databaseService.getAlbumById(albumId);
-    return { success: true, album };
-  } catch (error) {
-    console.error('Error obteniendo álbum:', error);
-    return { success: false, album: null };
-  }
+registerAliases(['library:getPlaylists', 'library:get-playlists'], () => transport(() => legacyDatabase.getAllPlaylists(), []));
+registerAliases(['library:createPlaylist', 'playlist:create'], (nameOrInput, description) => {
+  const input = typeof nameOrInput === 'object' && nameOrInput
+    ? nameOrInput as { name?: unknown; description?: unknown }
+    : { name: nameOrInput, description };
+  return transport(() => legacyDatabase.addPlaylist({
+    name: String(input.name ?? '').trim(),
+    description: input.description ? String(input.description) : undefined,
+    is_smart: 0,
+    is_system: 0,
+  }));
 });
-
-/**
- * Obtener albums
- */
-registerHandler('library:getAlbums', async (_event, artistId?: string) => {
-  try {
-    const albums = artistId 
-      ? databaseService.getAlbumsByArtist(artistId) 
-      : databaseService.getAllAlbums();
-    return { success: true, albums, total: albums.length };
-  } catch (error) {
-    console.error('Error obteniendo álbumes:', error);
-    return { success: false, albums: [], total: 0 };
-  }
+registerAliases(['library:deletePlaylist', 'playlist:delete'], (playlistId) => transport(() => legacyDatabase.deletePlaylist(String(playlistId ?? ''))));
+registerAliases(['library:addToPlaylist', 'playlist:add-track'], (playlistOrPayload, maybeTrackId) => {
+  const payload = typeof playlistOrPayload === 'object' && playlistOrPayload
+    ? playlistOrPayload as { playlistId?: unknown; trackId?: unknown }
+    : undefined;
+  const playlistId = payload ? String(payload.playlistId ?? '') : String(playlistOrPayload ?? '');
+  const trackId = payload ? String(payload.trackId ?? '') : String(maybeTrackId ?? '');
+  return transport(() => legacyDatabase.addTrackToPlaylist(playlistId, trackId));
 });
-
-/**
- * Obtener géneros
- */
-registerHandler('library:getGenres', async () => {
-  try {
-    const genres = databaseService.getAllGenres();
-    return { success: true, genres };
-  } catch (error) {
-    console.error('Error obteniendo géneros:', error);
-    return { success: false, genres: [] };
-  }
+registerAliases(['library:removeFromPlaylist', 'playlist:remove-track'], (playlistOrPayload, maybeTrackId) => {
+  const payload = typeof playlistOrPayload === 'object' && playlistOrPayload
+    ? playlistOrPayload as { playlistId?: unknown; trackId?: unknown }
+    : undefined;
+  const playlistId = payload ? String(payload.playlistId ?? '') : String(playlistOrPayload ?? '');
+  const trackId = payload ? String(payload.trackId ?? '') : String(maybeTrackId ?? '');
+  return transport(() => legacyDatabase.removeTrackFromPlaylist(playlistId, trackId));
 });
+registerAliases(['library:getPlaylistTracks', 'playlist:get-tracks'], (playlistId) => transport(() => legacyDatabase.getPlaylistTracks(String(playlistId ?? '')), []));
 
-/**
- * Añadir carpeta a monitorizar
- */
-registerHandler('library:addFolder', async (_event, folderPath: string, name?: string) => {
-  try {
-    const library = databaseService.addLibrary({
-      name: name || folderPath.split(path.sep).pop() || 'Nueva Biblioteca',
-      path: folderPath,
-      scan_depth: -1,
-      file_types: 'mp3,wav,flac,aac,ogg,m4a',
-      is_active: 1,
-    });
-    return { success: true, library };
-  } catch (error) {
-    console.error('Error añadiendo carpeta:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
+registerAliases(['library:addToQueue'], (trackId, sourceType, sourceId) => transport(() => legacyDatabase.addToQueue(String(trackId ?? ''), sourceType as string | undefined, sourceId as string | undefined)));
+registerAliases(['library:getQueue'], () => transport(() => legacyDatabase.getQueue(), []));
+registerAliases(['library:clearQueue'], () => transport(() => legacyDatabase.clearQueue()));
+registerAliases(['library:removeFromQueue'], (queueItemId) => transport(() => legacyDatabase.removeFromQueue(Number(queueItemId))));
 
-/**
- * Eliminar carpeta monitorizada
- */
-registerHandler('library:removeFolder', async (_event, libraryId: string) => {
-  try {
-    const success = databaseService.deleteLibrary(libraryId);
-    return { success };
-  } catch (error) {
-    console.error('Error eliminando carpeta:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Obtener carpetas monitorizadas
- */
-registerHandler('library:getFolders', async () => {
-  try {
-    const libraries = databaseService.getAllLibraries();
-    return { success: true, libraries };
-  } catch (error) {
-    console.error('Error obteniendo carpetas:', error);
-    return { success: false, libraries: [] };
-  }
-});
-
-/**
- * Actualizar biblioteca
- */
-registerHandler('library:updateLibrary', async (_event, libraryId: string, data: { name?: string; path?: string; is_active?: number }) => {
-  try {
-    const library = databaseService.updateLibrary(libraryId, data);
-    return { success: true, library };
-  } catch (error) {
-    console.error('Error actualizando biblioteca:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Búsqueda en biblioteca local
- */
-registerHandler('library:search', async (_event, query: string) => {
-  try {
-    const results = databaseService.search(query);
-    return { success: true, ...results };
-  } catch (error) {
-    console.error('Error buscando:', error);
-    return { success: false, tracks: [], artists: [], albums: [] };
-  }
-});
-
-/**
- * Obtener canciones favoritas
- */
-registerHandler('library:getFavorites', async () => {
-  try {
-    const tracks = databaseService.getFavoriteTracks();
-    return { success: true, tracks };
-  } catch (error) {
-    console.error('Error obteniendo favoritos:', error);
-    return { success: false, tracks: [] };
-  }
-});
-
-/**
- * Alternar favorito
- */
-registerHandler('library:toggleFavorite', async (_event, trackId: string) => {
-  try {
-    const isFavorite = databaseService.toggleFavorite(trackId);
-    return { success: true, isFavorite };
-  } catch (error) {
-    console.error('Error alternando favorito:', error);
-    return { success: false, isFavorite: false };
-  }
-});
-
-/**
- * Obtener canciones reproducidas recientemente
- */
-registerHandler('library:getRecentlyPlayed', async (_event, limit?: number) => {
-  try {
-    const tracks = databaseService.getRecentlyPlayedTracks(limit);
-    return { success: true, tracks };
-  } catch (error) {
-    console.error('Error obteniendo recientes:', error);
-    return { success: false, tracks: [] };
-  }
-});
-
-/**
- * Obtener estadísticas de la biblioteca
- */
-registerHandler('library:getStats', async () => {
-  try {
-    const stats = databaseService.getLibraryStats();
-    return { success: true, stats };
-  } catch (error) {
-    console.error('Error obteniendo estadísticas:', error);
-    return { success: false, stats: null };
-  }
-});
-
-/**
- * Eliminar canción de la biblioteca
- */
-registerHandler('library:deleteTrack', async (_event, trackId: string) => {
-  try {
-    const success = databaseService.deleteTrack(trackId);
-    return { success };
-  } catch (error) {
-    console.error('Error eliminando canción:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Actualizar metadatos de canción
- */
-registerHandler('library:updateTrack', async (_event, trackId: string, data: Record<string, unknown>) => {
-  try {
-    const track = databaseService.updateTrack(trackId, data);
-    return { success: true, track };
-  } catch (error) {
-    console.error('Error actualizando canción:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-// ==================== PLAYLISTS ====================
-
-/**
- * Obtener todas las playlists
- */
-registerHandler('library:getPlaylists', async () => {
-  try {
-    const playlists = databaseService.getAllPlaylists();
-    return { success: true, playlists };
-  } catch (error) {
-    console.error('Error obteniendo playlists:', error);
-    return { success: false, playlists: [] };
-  }
-});
-
-/**
- * Crear playlist
- */
-registerHandler('library:createPlaylist', async (_event, name: string, description?: string) => {
-  try {
-    const playlist = databaseService.addPlaylist({
-      name,
-      description,
-      is_smart: 0,
-      is_system: 0,
-    });
-    return { success: true, playlist };
-  } catch (error) {
-    console.error('Error creando playlist:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Eliminar playlist
- */
-registerHandler('library:deletePlaylist', async (_event, playlistId: string) => {
-  try {
-    const success = databaseService.deletePlaylist(playlistId);
-    return { success };
-  } catch (error) {
-    console.error('Error eliminando playlist:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Añadir canción a playlist
- */
-registerHandler('library:addToPlaylist', async (_event, playlistId: string, trackId: string) => {
-  try {
-    databaseService.addTrackToPlaylist(playlistId, trackId);
-    return { success: true };
-  } catch (error) {
-    console.error('Error añadiendo a playlist:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Eliminar canción de playlist
- */
-registerHandler('library:removeFromPlaylist', async (_event, playlistId: string, trackId: string) => {
-  try {
-    databaseService.removeTrackFromPlaylist(playlistId, trackId);
-    return { success: true };
-  } catch (error) {
-    console.error('Error eliminando de playlist:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Obtener canciones de playlist
- */
-registerHandler('library:getPlaylistTracks', async (_event, playlistId: string) => {
-  try {
-    const tracks = databaseService.getPlaylistTracks(playlistId);
-    return { success: true, tracks };
-  } catch (error) {
-    console.error('Error obteniendo canciones de playlist:', error);
-    return { success: false, tracks: [] };
-  }
-});
-
-// ==================== COLA DE REPRODUCCIÓN ====================
-
-/**
- * Añadir a cola de reproducción
- */
-registerHandler('library:addToQueue', async (_event, trackId: string, sourceType?: string, sourceId?: string) => {
-  try {
-    const position = databaseService.addToQueue(trackId, sourceType, sourceId);
-    return { success: true, position };
-  } catch (error) {
-    console.error('Error añadiendo a cola:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Obtener cola de reproducción
- */
-registerHandler('library:getQueue', async () => {
-  try {
-    const queue = databaseService.getQueue();
-    return { success: true, queue };
-  } catch (error) {
-    console.error('Error obteniendo cola:', error);
-    return { success: false, queue: [] };
-  }
-});
-
-/**
- * Limpiar cola de reproducción
- */
-registerHandler('library:clearQueue', async () => {
-  try {
-    databaseService.clearQueue();
-    return { success: true };
-  } catch (error) {
-    console.error('Error limpiando cola:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Eliminar de la cola
- */
-registerHandler('library:removeFromQueue', async (_event, queueItemId: number) => {
-  try {
-    databaseService.removeFromQueue(queueItemId);
-    return { success: true };
-  } catch (error) {
-    console.error('Error eliminando de cola:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-// ==================== EXCLUSIONES ====================
-
-/**
- * Añadir path a exclusión
- */
-registerHandler('library:addExcludedPath', async (_event, pathToExclude: string) => {
-  try {
-    databaseService.addExcludedPath(pathToExclude);
-    return { success: true };
-  } catch (error) {
-    console.error('Error añadiendo exclusión:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Eliminar path de exclusión
- */
-registerHandler('library:removeExcludedPath', async (_event, pathToExclude: string) => {
-  try {
-    databaseService.removeExcludedPath(pathToExclude);
-    return { success: true };
-  } catch (error) {
-    console.error('Error eliminando exclusión:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
-  }
-});
-
-/**
- * Obtener paths excluidos
- */
-registerHandler('library:getExcludedPaths', async () => {
-  try {
-    const paths = databaseService.getExcludedPaths();
-    return { success: true, paths };
-  } catch (error) {
-    console.error('Error obteniendo exclusiones:', error);
-    return { success: false, paths: [] };
-  }
-});
+registerAliases(['library:addExcludedPath'], (path) => transport(() => legacyDatabase.addExcludedPath(String(path ?? ''))));
+registerAliases(['library:removeExcludedPath'], (path) => transport(() => legacyDatabase.removeExcludedPath(String(path ?? ''))));
+registerAliases(['library:getExcludedPaths'], () => transport(() => legacyDatabase.getExcludedPaths(), []));

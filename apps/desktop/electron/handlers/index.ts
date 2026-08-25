@@ -1,36 +1,27 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { BrowserWindow, ipcMain } from 'electron';
 
-// Import handlers
 import './library.handler';
 import './player.handler';
 import './youtube.handler';
-import './playlist.handler';
 
-// Window controls handlers
 ipcMain.on('window:minimize', () => {
   BrowserWindow.getFocusedWindow()?.minimize();
 });
 
 ipcMain.on('window:maximize', () => {
   const window = BrowserWindow.getFocusedWindow();
-  if (window) {
-    if (window.isMaximized()) {
-      window.unmaximize();
-    } else {
-      window.maximize();
-    }
-  }
+  if (!window) return;
+  window.isMaximized() ? window.unmaximize() : window.maximize();
 });
 
 ipcMain.on('window:close', () => {
   BrowserWindow.getFocusedWindow()?.close();
 });
 
-ipcMain.on('window:isMaximized', () => {
-  return BrowserWindow.getFocusedWindow()?.isMaximized();
+ipcMain.on('window:isMaximized', (event) => {
+  event.returnValue = BrowserWindow.getFocusedWindow()?.isMaximized() ?? false;
 });
 
 export function registerIPCHandlers() {
-  // All handlers are imported and registered in their respective files
-  console.log('IPC Handlers registered');
+  console.log('IPC handlers registered');
 }
