@@ -3,7 +3,6 @@
  * Escanear carpetas, extraer metadatos y sincronizar con la base de datos
  */
 
-import { app } from 'electron';
 import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -30,12 +29,8 @@ class FileScannerService {
 
   private progressCallback: ((progress: ScanProgress) => void) | null = null;
 
-  // Formatos de audio soportados
   private readonly SUPPORTED_FORMATS = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'opus', 'webm'];
 
-  /**
-   * Escanear una biblioteca completa
-   */
   async scanLibrary(libraryId: string): Promise<ScanResult> {
     const library = databaseService.getLibraryById(libraryId);
     if (!library) {
@@ -44,7 +39,7 @@ class FileScannerService {
 
     this.isCancelled = false;
     const startTime = Date.now();
-    
+
     this.currentStatus = {
       isScanning: true,
       progress: 0,
@@ -65,11 +60,9 @@ class FileScannerService {
     };
 
     try {
-      // Escanear todos los archivos
       const files = await this.walkDirectory(library.path);
       result.totalFiles = files.length;
 
-      // Detectar archivos eliminados
       const existingFiles = databaseService.getAllFilePaths();
       const currentFiles = new Set(files.map(f => f.path));
       const deletedFiles = existingFiles.filter(f => !currentFiles.has(f));
@@ -80,7 +73,6 @@ class FileScannerService {
         result.removedTracks++;
       }
 
-      // Escanear archivos nuevos/modificados
       for (const file of files) {
         if (this.isCancelled) break;
 
@@ -89,9 +81,8 @@ class FileScannerService {
 
           if (trackInfo) {
             const existingTrack = databaseService.getTrackByPath(file.path);
-            
+
             if (existingTrack) {
-              // Verificar si el archivo ha cambiado
               if (existingTrack.file_hash !== trackInfo.file_hash) {
                 databaseService.updateTrack(existingTrack.id, trackInfo);
                 result.updatedTracks++;
@@ -103,22 +94,17 @@ class FileScannerService {
           }
 
           result.scannedFiles++;
-          
-          // Calcular progreso
+
           const progress: ScanProgress = {
             current: result.scannedFiles,
             total: result.totalFiles,
             currentFile: file.path,
-            percentage: Math.round((result.scannedFiles / result.totalFiles) * 100),
+            percentage: result.totalFiles === 0 ? 100 : Math.round((result.scannedFiles / result.totalFiles) * 100),
           };
 
           this.currentStatus.progress = progress.percentage;
           this.currentStatus.currentFile = file.path;
-
-          if (this.progressCallback) {
-            this.progressCallback(progress);
-          }
-
+          this.progressCallback?.(progress);
         } catch (error) {
           result.errors.push({
             file: file.path,
@@ -127,9 +113,7 @@ class FileScannerService {
         }
       }
 
-      // Actualizar fecha del último escaneo
       databaseService.updateLibraryLastScan(libraryId);
-
     } catch (error) {
       result.errors.push({
         file: library.path,
@@ -138,7 +122,7 @@ class FileScannerService {
     }
 
     result.duration = Date.now() - startTime;
-    
+
     this.currentStatus = {
       isScanning: false,
       progress: 100,
@@ -151,12 +135,8 @@ class FileScannerService {
     return result;
   }
 
-  /**
-   * Procesar un archivo individual
-   */
   private async processFile(file: FileInfo): Promise<Parameters<typeof databaseService.addTrack>[0] | null> {
     try {
-      // Generar hash del archivo
       const fileHash = await this.generateFileHash(file.path);
 
       return {
@@ -175,9 +155,6 @@ class FileScannerService {
     }
   }
 
-  /**
-   * Escanear directorio recursivamente
-   */
   private async walkDirectory(dir: string): Promise<FileInfo[]> {
     const files: FileInfo[] = [];
     const excludedPaths = databaseService.getExcludedPaths();
@@ -192,11 +169,7 @@ class FileScannerService {
 
         const fullPath = path.join(currentDir, entry.name);
         const relativePath = path.relative(dir, fullPath);
-
-        // Verificar exclusión
-        const isExcluded = excludedPaths.some(ep => 
-          relativePath.startsWith(ep) || fullPath.startsWith(ep)
-        );
+        const isExcluded = excludedPaths.some(ep => relativePath.startsWith(ep) || fullPath.startsWith(ep));
 
         if (isExcluded) continue;
 
@@ -206,12 +179,7 @@ class FileScannerService {
           const ext = path.extname(entry.name).toLowerCase().slice(1);
           if (this.SUPPORTED_FORMATS.includes(ext)) {
             const stat = await fs.stat(fullPath);
-            files.push({
-              path: fullPath,
-              mtime: stat.mtime,
-              size: stat.size,
-              extension: ext,
-            });
+            files.push({ path: fullPath, mtime: stat.mtime, size: stat.size, extension: ext });
           }
         }
       }
@@ -221,9 +189,6 @@ class FileScannerService {
     return files;
   }
 
-  /**
-   * Generar hash del archivo para detectar cambios
-   */
   private async generateFileHash(filePath: string): Promise<string> {
     const fileHandle = await fs.open(filePath, 'r');
     const hash = crypto.createHash('md5');
@@ -232,8 +197,8 @@ class FileScannerService {
     try {
       let bytesRead: number;
       do {
-        bytesRead = await fileHandle.read(buffer, 0, buffer.length);
-        hash.update(buffer.slice(0, bytesRead));
+        ({ bytesRead } = await fileHandle.read(buffer, 0, buffer.length));
+        hash.update(buffer.subarray(0, bytesRead));
       } while (bytesRead === buffer.length);
     } finally {
       await fileHandle.close();
@@ -242,48 +207,18 @@ class FileScannerService {
     return hash.digest('hex');
   }
 
-  /**
-   * Guardar portada de álbum
-   */
-  private async saveCoverArt(albumId: string, coverData: Uint8Array): Promise<string | null> {
-    try {
-      const coverDir = path.join(app.getPath('userData'), 'covers');
-      await fs.mkdir(coverDir, { recursive: true });
-
-      const coverPath = path.join(coverDir, `${albumId}.jpg`);
-      await fs.writeFile(coverPath, coverData);
-      
-      return coverPath;
-    } catch (error) {
-      console.error('Error guardando portada:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Cancelar escaneo en progreso
-   */
   cancelScan(): void {
     this.isCancelled = true;
   }
 
-  /**
-   * Obtener estado del escaneo
-   */
   getScanStatus(): ScanStatus {
     return { ...this.currentStatus };
   }
 
-  /**
-   * Configurar callback de progreso
-   */
   onProgress(callback: (progress: ScanProgress) => void): void {
     this.progressCallback = callback;
   }
 
-  /**
-   * Escanear archivo individual para obtener metadatos básicos
-   */
   async scanFile(filePath: string): Promise<ProcessedTrack | null> {
     try {
       const ext = path.extname(filePath).toLowerCase().slice(1);
