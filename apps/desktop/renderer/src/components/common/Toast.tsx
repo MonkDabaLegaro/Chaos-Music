@@ -18,47 +18,36 @@ interface ToastRef {
   hide: () => void;
 }
 
-interface ToastProviderProps {
-  children: React.ReactNode;
-}
-
-// Simple Toast implementation
 const Toast: React.FC<ToastProps> = ({
   open = false,
   message = '',
   severity = 'info',
   duration = 4000,
   onClose,
-}) => {
-  return (
-    <Snackbar
-      open={open}
-      autoHideDuration={duration}
+}) => (
+  <Snackbar
+    open={open}
+    autoHideDuration={duration}
+    onClose={onClose}
+    anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    TransitionComponent={Slide}
+  >
+    <Alert
       onClose={onClose}
-      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      TransitionComponent={Slide}
+      severity={severity}
+      variant="filled"
+      sx={{ width: '100%', minWidth: 300 }}
+      iconMapping={{
+        success: <CheckCircleIcon fontSize="inherit" />,
+        error: <ErrorIcon fontSize="inherit" />,
+        info: <InfoIcon fontSize="inherit" />,
+        warning: <WarningIcon fontSize="inherit" />,
+      }}
     >
-      <Alert
-        onClose={onClose}
-        severity={severity}
-        variant="filled"
-        sx={{
-          width: '100%',
-          minWidth: 300,
-        }}
-        iconMapping={{
-          success: <CheckCircleIcon fontSize="inherit" />,
-          error: <ErrorIcon fontSize="inherit" />,
-          info: <InfoIcon fontSize="inherit" />,
-          warning: <WarningIcon fontSize="inherit" />,
-        }}
-      >
-        {message}
-      </Alert>
-    </Snackbar>
-  );
-};
+      {message}
+    </Alert>
+  </Snackbar>
+);
 
 export default Toast;
 export type { ToastProps, ToastRef };
-
