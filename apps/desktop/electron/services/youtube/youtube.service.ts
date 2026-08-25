@@ -1,56 +1,60 @@
-/**
- * Servicio de YouTube - Implementación completa
- * Maneja búsqueda, streaming, extracción de audio y más
- */
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import ffmpeg from 'fluent-ffmpeg';
+import youtubedl from 'youtube-dl-exec';
+import type {
+  AudioExtractOptions,
+  ExtractedAudioMetadata,
+  YouTubeError,
+  YouTubeErrorCode,
+  YouTubePlaylist,
+  YouTubePlaylistItem,
+  YouTubeRecommendations,
+  YouTubeSearchOptions,
+  YouTubeSearchResult,
+  YouTubeServiceConfig,
+  YouTubeStreamConfig,
+  YouTubeVideo,
+} from './types';
 
-import { exec } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import { promisify } from 'util';
-import { AudioExtractOptions, ExtractedAudioMetadata, YouTubeError, YouTubeErrorCode, YouTubePlaylist, YouTubePlaylistItem, YouTubeRecommendations, YouTubeSearchOptions, YouTubeSearchResult, YouTubeServiceConfig, YouTubeStreamConfig, YouTubeVideo } from './types';
-
-const execAsync = promisify(exec);
-
-// Cache en memoria para búsquedas
 interface CacheEntry {
   data: unknown;
   timestamp: number;
+  maxAgeMinutes?: number;
 }
+
+type JsonObject = Record<string, unknown>;
+
+const asObject = (value: unknown): JsonObject =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) ? value as JsonObject : {};
+const asArray = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
+const text = (value: unknown, fallback = ''): string => typeof value === 'string' ? value : fallback;
+const number = (value: unknown, fallback = 0): number => typeof value === 'number' ? value : fallback;
+const bool = (value: unknown): boolean => value === true;
 
 class YouTubeService {
   private config: YouTubeServiceConfig;
-  private cache: Map<string, CacheEntry> = new Map();
-  private apiKey: string;
+  private cache = new Map<string, CacheEntry>();
 
   constructor() {
-    this.apiKey = process.env.YOUTUBE_API_KEY || '';
     this.config = {
-      apiKey: this.apiKey,
+      apiKey: process.env.YOUTUBE_API_KEY || '',
       cacheEnabled: true,
-      cacheMaxAge: 60, // 60 minutos
+      cacheMaxAge: 60,
       maxRetries: 3,
       retryDelay: 1000,
       requestTimeout: 30000,
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      userAgent: 'Chaos-Music/0.2',
     };
   }
 
-  /**
-   * Inicializar el servicio con configuración personalizada
-   */
   initialize(config: Partial<YouTubeServiceConfig>): void {
     this.config = { ...this.config, ...config };
-    if (config.apiKey) {
-      this.apiKey = config.apiKey;
-    }
   }
 
-  /**
-   * Buscar videos en YouTube
-   */
   async search(options: Partial<YouTubeSearchOptions>): Promise<YouTubeSearchResult> {
     const opts: YouTubeSearchOptions = {
-      query: options.query || '',
+      query: options.query?.trim() || '',
       type: options.type || 'video',
       maxResults: options.maxResults || 20,
       pageToken: options.pageToken || null,
@@ -62,29 +66,27 @@ class YouTubeService {
       regionCode: options.regionCode || null,
     };
 
-    // Verificar cache
+    if (!opts.query) {
+      return { videos: [], nextPageToken: null, totalResults: 0, estimatedResults: 0 };
+    }
+
     const cacheKey = `search:${JSON.stringify(opts)}`;
     const cached = this.getFromCache<YouTubeSearchResult>(cacheKey);
     if (cached) return cached;
 
     try {
-      // Usar youtube-dl-exec para buscar
-      const searchQuery = opts.query;
-      const output = await this.executeYoutubeDl(`ytsearch${opts.maxResults}:${searchQuery}`, {
+      const output = await this.executeYoutubeDl(`ytsearch${opts.maxResults}:${opts.query}`, {
         dumpSingleJson: true,
         noWarnings: true,
         simulate: true,
       });
-
-      // Parsear resultados
       const videos = this.parseSearchResults(output);
-      const result: YouTubeSearchResult = {
+      const result = {
         videos,
-        nextPageToken: null, // youtube-dl no proporciona nextPageToken
+        nextPageToken: null,
         totalResults: videos.length,
         estimatedResults: videos.length,
-      };
-
+      } satisfies YouTubeSearchResult;
       this.setCache(cacheKey, result);
       return result;
     } catch (error) {
@@ -92,26 +94,17 @@ class YouTubeService {
     }
   }
 
-  /**
-   * Obtener información de un video específico
-   */
   async getVideo(videoId: string): Promise<YouTubeVideo> {
     const cacheKey = `video:${videoId}`;
     const cached = this.getFromCache<YouTubeVideo>(cacheKey);
     if (cached) return cached;
 
     try {
-      const output = await this.executeYoutubeDl(`https://www.youtube.com/watch?v=${videoId}`, {
+      const output = await this.executeYoutubeDl(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, {
         dumpSingleJson: true,
         noWarnings: true,
-        getDescription: true,
-        getDuration: true,
-        getThumbnail: true,
-        getTitle: true,
-        getUrl: true,
-        format: 'best',
+        simulate: true,
       });
-
       const video = this.parseVideoInfo(output, videoId);
       this.setCache(cacheKey, video);
       return video;
@@ -120,75 +113,44 @@ class YouTubeService {
     }
   }
 
-  /**
-   * Obtener URL de streaming de audio
-   */
   async getStreamUrl(videoId: string): Promise<YouTubeStreamConfig> {
     try {
       const video = await this.getVideo(videoId);
-      
-      if (video.isLive) {
-        // Para streams en vivo, obtener URL m3u8
-        const streamUrl = await this.getLiveStreamUrl(videoId);
-        return {
-          url: streamUrl,
-          format: 'm3u8',
-          quality: 'high',
-          bitrate: 128000,
-          sampleRate: 48000,
-          isLive: true,
-          duration: null,
-        };
-      }
-
-      // Para videos bajo demanda, obtener URL de audio
-      const streamUrl = await this.getAudioStreamUrl(videoId);
+      const url = video.isLive ? await this.getLiveStreamUrl(videoId) : await this.getAudioStreamUrl(videoId);
       return {
-        url: streamUrl,
-        format: 'mp3',
+        url,
+        format: video.isLive ? 'm3u8' : 'aac',
         quality: 'high',
-        bitrate: 192000,
-        sampleRate: 44100,
-        isLive: false,
-        duration: video.duration,
+        bitrate: video.isLive ? 128000 : 192000,
+        sampleRate: video.isLive ? 48000 : 44100,
+        isLive: video.isLive,
+        duration: video.isLive ? null : video.duration,
       };
     } catch (error) {
       throw this.handleError(error, 'STREAM_FAILED', videoId);
     }
   }
 
-  /**
-   * Extraer audio de un video
-   */
   async extractAudio(videoId: string, options: Partial<AudioExtractOptions> = {}): Promise<ExtractedAudioMetadata> {
     const opts: AudioExtractOptions = {
       format: options.format || 'mp3',
-      quality: options.quality || 2,
-      bitrate: options.bitrate || 192,
-      sampleRate: options.sampleRate || 44100,
-      outputPath: options.outputPath || null,
-      skipDownload: options.skipDownload || false,
+      quality: options.quality ?? 2,
+      bitrate: options.bitrate ?? 192,
+      sampleRate: options.sampleRate ?? 44100,
+      outputPath: options.outputPath ?? null,
+      skipDownload: options.skipDownload ?? false,
     };
 
     try {
-      const videoInfo = await this.getVideo(videoId);
-      const outputPath = opts.outputPath || path.join(process.cwd(), 'temp', `audio_${videoId}.${opts.format}`);
-      
-      // Crear directorio si no existe
-      const dir = path.dirname(outputPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
-
+      const video = await this.getVideo(videoId);
       if (opts.skipDownload) {
-        // Solo obtener la URL de streaming
         const streamUrl = await this.getAudioStreamUrl(videoId);
         return {
-          title: videoInfo.title,
-          artist: videoInfo.channelTitle,
+          title: video.title,
+          artist: video.channelTitle,
           album: '',
-          duration: videoInfo.duration,
-          thumbnail: videoInfo.thumbnail,
+          duration: video.duration,
+          thumbnail: video.thumbnail,
           filePath: streamUrl,
           fileSize: 0,
           format: opts.format,
@@ -198,17 +160,16 @@ class YouTubeService {
         };
       }
 
-      // Usar ffmpeg para extraer y convertir audio
-      await this.extractAudioWithFFmpeg(`https://www.youtube.com/watch?v=${videoId}`, outputPath, opts);
-      
+      const outputPath = opts.outputPath || path.join(process.cwd(), 'temp', `audio_${videoId}.${opts.format}`);
+      fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+      await this.extractAudioWithFFmpeg(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, outputPath, opts);
       const stats = fs.statSync(outputPath);
-      
       return {
-        title: videoInfo.title,
-        artist: videoInfo.channelTitle,
+        title: video.title,
+        artist: video.channelTitle,
         album: '',
-        duration: videoInfo.duration,
-        thumbnail: videoInfo.thumbnail,
+        duration: video.duration,
+        thumbnail: video.thumbnail,
         filePath: outputPath,
         fileSize: stats.size,
         format: opts.format,
@@ -221,94 +182,76 @@ class YouTubeService {
     }
   }
 
-  /**
-   * Obtener videos trending
-   */
   async getTrending(categoryId?: string): Promise<YouTubeVideo[]> {
     const cacheKey = `trending:${categoryId || 'all'}`;
     const cached = this.getFromCache<YouTubeVideo[]>(cacheKey);
     if (cached) return cached;
 
     try {
-      // Usar youtube-dl para obtener trending
       const output = await this.executeYoutubeDl('https://www.youtube.com/feed/trending', {
         dumpSingleJson: true,
         noWarnings: true,
         simulate: true,
       });
-
-      const videos = Array.isArray(output) ? output.map((item: Record<string, unknown>, index: number) => 
-        this.parseVideoInfo(item, item.id as string)
-      ) : [];
-
-      this.setCache(cacheKey, videos, 10); // Cache por 10 minutos para trending
+      const root = asObject(output);
+      const entries = asArray(root.entries);
+      const videos = entries.map((entry) => {
+        const data = asObject(entry);
+        return this.parseVideoInfo(data, text(data.id));
+      }).filter((video) => Boolean(video.id));
+      this.setCache(cacheKey, videos, 10);
       return videos;
     } catch (error) {
       throw this.handleError(error, 'SEARCH_FAILED');
     }
   }
 
-  /**
-   * Obtener recomendaciones basadas en un video
-   */
   async getRecommendations(videoId: string): Promise<YouTubeRecommendations> {
     try {
       const video = await this.getVideo(videoId);
-      
-      // Buscar videos relacionados usando la API de YouTube
-      const searchResults = await this.search({ 
+      const searchResults = await this.search({
         query: `${video.channelTitle} ${video.title}`,
         maxResults: 10,
         type: 'video',
       });
-
-      // Filtrar para obtener solo videos relacionados (no el mismo video)
-      const relatedVideos = searchResults.videos.filter(v => v.id !== videoId);
-
       return {
-        relatedVideos,
-        recommendedChannels: [
-          {
-            channelId: video.channelId,
-            channelTitle: video.channelTitle,
-            thumbnail: '',
-            videoCount: 0,
-            subscriberCount: 0,
-          },
-        ],
+        relatedVideos: searchResults.videos.filter((candidate) => candidate.id !== videoId),
+        recommendedChannels: [{
+          channelId: video.channelId,
+          channelTitle: video.channelTitle,
+          thumbnail: '',
+          videoCount: 0,
+          subscriberCount: 0,
+        }],
       };
     } catch (error) {
       throw this.handleError(error, 'SEARCH_FAILED', videoId);
     }
   }
 
-  /**
-   * Obtener playlist
-   */
   async getPlaylist(playlistId: string): Promise<YouTubePlaylist> {
     const cacheKey = `playlist:${playlistId}`;
     const cached = this.getFromCache<YouTubePlaylist>(cacheKey);
     if (cached) return cached;
 
     try {
-      const output = await this.executeYoutubeDl(`https://www.youtube.com/playlist?list=${playlistId}`, {
+      const output = asObject(await this.executeYoutubeDl(`https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`, {
         dumpSingleJson: true,
         noWarnings: true,
-      });
-
+        simulate: true,
+      }));
       const playlist: YouTubePlaylist = {
         id: playlistId,
         url: `https://www.youtube.com/playlist?list=${playlistId}`,
-        title: output.title || 'Unknown Playlist',
-        description: output.description || '',
-        thumbnail: output.thumbnail || '',
-        channelTitle: output.uploader || '',
-        channelId: '',
-        videoCount: output.entries?.length || 0,
-        viewCount: 0,
+        title: text(output.title, 'Unknown Playlist'),
+        description: text(output.description),
+        thumbnail: text(output.thumbnail),
+        channelTitle: text(output.uploader),
+        channelId: text(output.channel_id),
+        videoCount: asArray(output.entries).length,
+        viewCount: number(output.view_count),
         lastUpdated: new Date().toISOString(),
       };
-
       this.setCache(cacheKey, playlist);
       return playlist;
     } catch (error) {
@@ -316,264 +259,166 @@ class YouTubeService {
     }
   }
 
-  /**
-   * Obtener items de una playlist
-   */
   async getPlaylistItems(playlistId: string): Promise<YouTubePlaylistItem[]> {
     try {
-      const output = await this.executeYoutubeDl(`https://www.youtube.com/playlist?list=${playlistId}`, {
+      const output = asObject(await this.executeYoutubeDl(`https://www.youtube.com/playlist?list=${encodeURIComponent(playlistId)}`, {
         dumpSingleJson: true,
         noWarnings: true,
-      });
-
-      const items: YouTubePlaylistItem[] = (output.entries || []).map((entry: Record<string, unknown>, index: number) => ({
-        id: `item_${entry.id}_${index}`,
-        playlistId,
-        videoId: entry.id as string,
-        title: entry.title as string,
-        description: entry.description as string,
-        thumbnail: entry.thumbnail as string,
-        position: index,
-        duration: (entry.duration as number) || 0,
-        channelTitle: entry.uploader as string,
-        videoUrl: `https://www.youtube.com/watch?v=${entry.id}`,
+        simulate: true,
       }));
-
-      return items;
+      return asArray(output.entries).map((entry, index) => {
+        const data = asObject(entry);
+        const videoId = text(data.id);
+        return {
+          id: `item_${videoId}_${index}`,
+          playlistId,
+          videoId,
+          title: text(data.title),
+          description: text(data.description),
+          thumbnail: text(data.thumbnail),
+          position: index,
+          duration: number(data.duration),
+          channelTitle: text(data.uploader),
+          videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        };
+      });
     } catch (error) {
       throw this.handleError(error, 'PLAYLIST_NOT_FOUND');
     }
   }
 
-  // ========== Métodos privados ==========
-
-  /**
-   * Ejecutar youtube-dl con opciones
-   */
-  private async executeYoutubeDl(url: string, options: Record<string, unknown>): Promise<Record<string, unknown>> {
-    const opts = [
-      ...Object.entries(options).map(([key, value]) => {
-        if (typeof value === 'boolean') {
-          return value ? `--${key}` : `--no-${key}`;
-        }
-        return `--${key} "${value}"`;
-      }),
-      '--no-check-certificate',
-      '--no-cache-dir',
-      '--socket-timeout', '30',
-    ].join(' ');
-
-    try {
-      const { stdout } = await execAsync(`npx youtube-dl "${url}" ${opts}`);
-      return JSON.parse(stdout);
-    } catch (error) {
-      // Si falla youtube-dl, intentar con yt-dlp
-      try {
-        const { stdout } = await execAsync(`npx yt-dlp "${url}" ${opts}`);
-        return JSON.parse(stdout);
-      } catch (secondError) {
-        throw secondError;
-      }
-    }
+  private async executeYoutubeDl(target: string, options: Record<string, unknown>): Promise<unknown> {
+    return youtubedl(target, {
+      ...options,
+      noCheckCertificates: true,
+      noWarnings: true,
+    }, {
+      timeout: this.config.requestTimeout,
+    });
   }
 
-  /**
-   * Obtener URL de stream en vivo (m3u8)
-   */
   private async getLiveStreamUrl(videoId: string): Promise<string> {
-    const output = await this.executeYoutubeDl(`https://www.youtube.com/watch?v=${videoId}`, {
-      getUrl: true,
+    const output = asObject(await this.executeYoutubeDl(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, {
+      dumpSingleJson: true,
       format: 'best',
-    });
-    return (output as { url?: string }).url || '';
+    }));
+    return text(output.url);
   }
 
-  /**
-   * Obtener URL de stream de audio
-   */
   private async getAudioStreamUrl(videoId: string): Promise<string> {
-    const output = await this.executeYoutubeDl(`https://www.youtube.com/watch?v=${videoId}`, {
-      getUrl: true,
+    const output = asObject(await this.executeYoutubeDl(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, {
+      dumpSingleJson: true,
       format: 'bestaudio[ext=m4a]/bestaudio',
-    });
-    return (output as { url?: string }).url || '';
+    }));
+    return text(output.url);
   }
 
-  /**
-   * Extraer audio usando ffmpeg
-   */
   private async extractAudioWithFFmpeg(videoUrl: string, outputPath: string, options: AudioExtractOptions): Promise<void> {
-    const ffmpeg = await import('fluent-ffmpeg');
-    
-    return new Promise((resolve, reject) => {
-      const ffmpegPath = require('fluent-ffmpeg').setFfmpegPath;
-      // Configurar ruta de ffmpeg si es necesario
-      
+    await new Promise<void>((resolve, reject) => {
       ffmpeg(videoUrl)
-        .audioCodec('libmp3lame')
+        .audioCodec(optsCodec(options.format))
         .audioBitrate(options.bitrate)
         .audioFrequency(options.sampleRate)
         .audioChannels(2)
-        .format('mp3')
-        .on('end', () => resolve())
-        .on('error', (err: Error) => reject(err))
+        .format(options.format)
+        .on('end', resolve)
+        .on('error', reject)
         .save(outputPath);
     });
   }
 
-  /**
-   * Parsear resultados de búsqueda
-   */
-  private parseSearchResults(output: Record<string, unknown>): YouTubeVideo[] {
-    const entries = (output.entries as Record<string, unknown>[]) || [];
-    return entries.map((entry: Record<string, unknown>) => 
-      this.parseVideoInfo(entry, entry.id as string)
-    );
+  private parseSearchResults(output: unknown): YouTubeVideo[] {
+    const root = asObject(output);
+    return asArray(root.entries).map((entry) => {
+      const data = asObject(entry);
+      return this.parseVideoInfo(data, text(data.id));
+    }).filter((video) => Boolean(video.id));
   }
 
-  /**
-   * Parsear información de video
-   */
-  private parseVideoInfo(output: Record<string, unknown>, videoId: string): YouTubeVideo {
-    const duration = (output.duration as number) || 0;
-    
+  private parseVideoInfo(value: unknown, videoId: string): YouTubeVideo {
+    const output = asObject(value);
+    const duration = number(output.duration);
+    const categories = asArray(output.categories).filter((item): item is string => typeof item === 'string');
+    const tags = asArray(output.tags).filter((item): item is string => typeof item === 'string');
     return {
       id: videoId,
       url: `https://www.youtube.com/watch?v=${videoId}`,
-      title: (output.title as string) || 'Unknown Title',
-      description: (output.description as string) || '',
-      thumbnail: (output.thumbnail as string) || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-      channelTitle: (output.uploader as string) || (output.channel as string) || 'Unknown Channel',
-      channelId: (output.channel_id as string) || '',
-      channelUrl: (output.uploader_url as string) || `https://www.youtube.com/channel/`,
+      title: text(output.title, 'Unknown Title'),
+      description: text(output.description),
+      thumbnail: text(output.thumbnail, `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`),
+      channelTitle: text(output.uploader, text(output.channel, 'Unknown Channel')),
+      channelId: text(output.channel_id),
+      channelUrl: text(output.uploader_url),
       duration,
       durationString: this.formatDuration(duration),
-      viewCount: (output.view_count as number) || (output.views as number) || 0,
-      likeCount: (output.like_count as number) || 0,
-      commentCount: (output.comment_count as number) || 0,
-      uploadDate: (output.upload_date as string) || new Date().toISOString(),
-      isLive: (output.is_live as boolean) || false,
-      isAgeRestricted: false, // youtube-dl maneja esto internamente
+      viewCount: number(output.view_count, number(output.views)),
+      likeCount: number(output.like_count),
+      commentCount: number(output.comment_count),
+      uploadDate: text(output.upload_date, new Date().toISOString()),
+      isLive: bool(output.is_live),
+      isAgeRestricted: false,
       isRegionBlocked: false,
-      tags: (output.tags as string[]) || [],
-      categoryId: (output.categories as string[])?.[0] || '',
-      defaultAudioLanguage: (output.language as string) || null,
-      playableUrl: (output.url as string) || null,
-      streamUrl: (output.url as string) || null,
+      tags,
+      categoryId: categories[0] || '',
+      defaultAudioLanguage: text(output.language) || null,
+      playableUrl: text(output.url) || null,
+      streamUrl: text(output.url) || null,
     };
   }
 
-  /**
-   * Formatear duración en segundos a string legible
-   */
   private formatDuration(seconds: number): string {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+    const secs = Math.floor(seconds % 60);
+    return hours > 0
+      ? `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+      : `${minutes}:${secs.toString().padStart(2, '0')}`;
   }
 
-  /**
-   * Obtener del cache
-   */
   private getFromCache<T>(key: string): T | null {
     if (!this.config.cacheEnabled) return null;
-    
     const entry = this.cache.get(key);
     if (!entry) return null;
-
-    const age = (Date.now() - entry.timestamp) / 1000 / 60; // minutos
-    if (age > this.config.cacheMaxAge) {
+    const ageMinutes = (Date.now() - entry.timestamp) / 60000;
+    if (ageMinutes > (entry.maxAgeMinutes ?? this.config.cacheMaxAge)) {
       this.cache.delete(key);
       return null;
     }
-
     return entry.data as T;
   }
 
-  /**
-   * Guardar en cache
-   */
-  private setCache(key: string, data: unknown, maxAge?: number): void {
+  private setCache(key: string, data: unknown, maxAgeMinutes?: number): void {
     if (!this.config.cacheEnabled) return;
-
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now(),
-    });
-
-    // Limpiar cache si excede el tamaño máximo
+    this.cache.set(key, { data, timestamp: Date.now(), maxAgeMinutes });
     if (this.cache.size > 1000) {
-      const entries = Array.from(this.cache.entries());
-      entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-      const toDelete = entries.slice(0, 100);
-      toDelete.forEach(([key]) => this.cache.delete(key));
+      const oldest = [...this.cache.entries()]
+        .sort((a, b) => a[1].timestamp - b[1].timestamp)
+        .slice(0, 100);
+      oldest.forEach(([cacheKey]) => this.cache.delete(cacheKey));
     }
   }
 
-  /**
-   * Manejar errores
-   */
   private handleError(error: unknown, code: YouTubeErrorCode, videoId?: string): YouTubeError {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    
+    const message = error instanceof Error ? error.message : String(error);
     let recoverable = true;
     let retryAfter: number | undefined;
 
-    if (errorMessage.includes('quota')) {
-      code = 'API_QUOTA_EXCEEDED';
-      recoverable = false;
-    } else if (errorMessage.includes('rate')) {
-      code = 'API_RATE_LIMITED';
-      retryAfter = 60;
-    } else if (errorMessage.includes('age')) {
-      code = 'VIDEO_AGE_RESTRICTED';
-      recoverable = false;
-    } else if (errorMessage.includes('copyright')) {
-      code = 'VIDEO_COPYRIGHT';
-      recoverable = false;
-    } else if (errorMessage.includes('private')) {
-      code = 'VIDEO_PRIVATE';
-      recoverable = false;
-    } else if (errorMessage.includes('deleted')) {
-      code = 'VIDEO_DELETED';
-      recoverable = false;
-    }
+    if (message.includes('quota')) { code = 'API_QUOTA_EXCEEDED'; recoverable = false; }
+    else if (message.includes('rate')) { code = 'API_RATE_LIMITED'; retryAfter = 60; }
+    else if (message.includes('age')) { code = 'VIDEO_AGE_RESTRICTED'; recoverable = false; }
+    else if (message.includes('copyright')) { code = 'VIDEO_COPYRIGHT'; recoverable = false; }
+    else if (message.includes('private')) { code = 'VIDEO_PRIVATE'; recoverable = false; }
+    else if (message.includes('network') || message.includes('timeout')) { code = 'NETWORK_ERROR'; }
 
-    return {
-      code,
-      message: errorMessage,
-      videoId,
-      recoverable,
-      retryAfter,
-    };
-  }
-
-  /**
-   * Limpiar cache
-   */
-  clearCache(): void {
-    this.cache.clear();
-  }
-
-  /**
-   * Obtener estadísticas del cache
-   */
-  getCacheStats() {
-    return {
-      size: this.cache.size,
-      maxSize: 1000,
-      hitCount: 0,
-      missCount: 0,
-      hitRate: 0,
-    };
+    return { code, message, videoId, recoverable, retryAfter };
   }
 }
 
-// Exportar instancia singleton
+const optsCodec = (format: AudioExtractOptions['format']): string => {
+  if (format === 'aac') return 'aac';
+  if (format === 'ogg') return 'libvorbis';
+  if (format === 'wav') return 'pcm_s16le';
+  return 'libmp3lame';
+};
+
 export const youtubeService = new YouTubeService();
-export default youtubeService;
