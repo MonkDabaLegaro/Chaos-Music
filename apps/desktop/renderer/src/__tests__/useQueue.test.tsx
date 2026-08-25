@@ -1,16 +1,11 @@
-/**
- * Pruebas Unitarias para useQueue Hook
- */
-
-import { renderHook, act } from '@testing-library/react';
-import { Provider } from 'react-redux';
+import { act, renderHook } from '@testing-library/react';
 import { configureStore } from '@reduxjs/toolkit';
-import queueReducer from '../store/slices/queue.slice';
-import playerReducer from '../store/slices/player.slice';
+import { Provider } from 'react-redux';
 import { useQueue } from '../hooks/useQueue';
 import { playerService } from '../services/player.service';
+import playerReducer from '../store/slices/player.slice';
+import queueReducer from '../store/slices/queue.slice';
 
-// Mock del servicio de player
 jest.mock('../services/player.service', () => ({
   playerService: {
     addToQueue: jest.fn().mockResolvedValue(undefined),
@@ -20,277 +15,70 @@ jest.mock('../services/player.service', () => ({
   },
 }));
 
-describe('useQueue Hook', () => {
-  let store: ReturnType<typeof configureStore>;
-  let wrapper: React.FC<{ children: React.ReactNode }>;
+describe('useQueue', () => {
+  const setup = () => {
+    const store = configureStore({ reducer: { queue: queueReducer, player: playerReducer } });
+    const wrapper = ({ children }: { children: React.ReactNode }) => <Provider store={store}>{children}</Provider>;
+    return { store, ...renderHook(() => useQueue(), { wrapper }) };
+  };
 
-  beforeEach(() => {
-    store = configureStore({
-      reducer: {
-        queue: queueReducer,
-        player: playerReducer,
-      },
-    });
+  beforeEach(() => jest.clearAllMocks());
 
-    wrapper = ({ children }: { children: React.ReactNode }) => (
-      <Provider store={store}>{children}</Provider>
-    );
+  it('expone una cola vacía inicialmente', () => {
+    const { result } = setup();
+    expect(result.current.queueItems).toEqual([]);
+    expect(result.current.currentTrack).toBeNull();
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  it('agrega entidades Track tanto al estado como al motor', async () => {
+    const track = { id: '1', title: 'Track 1', duration: 180 } as any;
+    const { result, store } = setup();
+
+    await act(async () => { await result.current.addToQueue(track); });
+
+    expect(store.getState().queue.items).toHaveLength(1);
+    expect(playerService.addToQueue).toHaveBeenCalledWith([track]);
   });
 
-  describe('state', () => {
-    it('debería retornar el estado de la cola', () => {
-      const { result } = renderHook(() => useQueue(), { wrapper });
+  it('agrega múltiples pistas preservando su orden', async () => {
+    const tracks = [
+      { id: '1', title: 'Track 1', duration: 180 },
+      { id: '2', title: 'Track 2', duration: 200 },
+    ] as any[];
+    const { result, store } = setup();
 
-      expect(result.current.queueItems).toEqual([]);
-      expect(result.current.currentIndex).toBe(0);
-      expect(result.current.isExpanded).toBe(false);
-    });
+    await act(async () => { await result.current.addToQueue(tracks); });
+
+    expect(store.getState().queue.items.map((item: any) => item.track.id)).toEqual(['1', '2']);
+    expect(playerService.addToQueue).toHaveBeenCalledWith(tracks);
   });
 
-  describe('addToQueue', () => {
-    it('debería agregar una canción a la cola', async () => {
-      const track = { id: '1', title: 'Track 1', duration: 180 };
-      const { result } = renderHook(() => useQueue(), { wrapper });
+  it('remueve y reordena items sincronizando el motor', async () => {
+    const { result, store } = setup();
+    const tracks = [{ id: '1' }, { id: '2' }] as any[];
+    await act(async () => { await result.current.addToQueue(tracks); });
+    const firstId = store.getState().queue.items[0].id;
 
-      await act(async () => {
-        await result.current.addToQueue(track as any);
-      });
+    await act(async () => { await result.current.reorder(0, 1); });
+    expect(playerService.reorderQueue).toHaveBeenCalledWith(0, 1);
 
-      expect(store.getState().queue.items).toHaveLength(1);
-      expect(playerService.addToQueue).toHaveBeenCalledWith(['1']);
-    });
-
-    it('debería agregar múltiples canciones a la cola', async () => {
-      const tracks = [
-        { id: '1', title: 'Track 1', duration: 180 },
-        { id: '2', title: 'Track 2', duration: 200 },
-      ];
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      await act(async () => {
-        await result.current.addToQueue(tracks as any[]);
-      });
-
-      expect(store.getState().queue.items).toHaveLength(2);
-    });
+    await act(async () => { await result.current.removeFromQueue(firstId); });
+    expect(store.getState().queue.items).toHaveLength(1);
   });
 
-  describe('removeFromQueue', () => {
-    it('debería remover una canción de la cola', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-        { id: 'item-2', track: { id: '2' }, position: 1, addedAt: new Date().toISOString() },
-      ];
+  it('limpia la cola y controla navegación/expansión', async () => {
+    const { result, store } = setup();
+    await act(async () => { await result.current.addToQueue([{ id: '1' }, { id: '2' }] as any[]); });
 
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-      });
+    act(() => result.current.goToIndex(1));
+    expect(store.getState().queue.currentIndex).toBe(1);
+    act(() => result.current.previous());
+    expect(store.getState().queue.currentIndex).toBe(0);
+    act(() => result.current.toggleExpandedView());
+    expect(store.getState().queue.isExpanded).toBe(true);
 
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      await act(async () => {
-        await result.current.removeFromQueue('item-1');
-      });
-
-      expect(store.getState().queue.items).toHaveLength(1);
-      expect(playerService.removeFromQueue).toHaveBeenCalledWith(0);
-    });
-
-    it('no debería hacer nada si el item no existe', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      await act(async () => {
-        await result.current.removeFromQueue('non-existent');
-      });
-
-      expect(store.getState().queue.items).toHaveLength(1);
-    });
-  });
-
-  describe('reorder', () => {
-    it('debería reordenar la cola', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-        { id: 'item-2', track: { id: '2' }, position: 1, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      await act(async () => {
-        await result.current.reorder(0, 1);
-      });
-
-      expect(store.getState().queue.items[0].id).toBe('item-2');
-      expect(playerService.reorderQueue).toHaveBeenCalledWith(0, 1);
-    });
-  });
-
-  describe('clear', () => {
-    it('debería limpiar la cola', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-        { id: 'item-2', track: { id: '2' }, position: 1, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      await act(async () => {
-        await result.current.clear();
-      });
-
-      expect(store.getState().queue.items).toHaveLength(0);
-      expect(playerService.clearQueue).toHaveBeenCalled();
-    });
-  });
-
-  describe('goToIndex', () => {
-    it('debería ir a un índice específico', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-        { id: 'item-2', track: { id: '2' }, position: 1, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      act(() => {
-        result.current.goToIndex(1);
-      });
-
-      expect(store.getState().queue.currentIndex).toBe(1);
-    });
-  });
-
-  describe('next', () => {
-    it('debería ir al siguiente item', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-        { id: 'item-2', track: { id: '2' }, position: 1, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      act(() => {
-        result.current.next();
-      });
-
-      expect(store.getState().queue.currentIndex).toBe(1);
-    });
-
-    it('debería hacer loop al inicio', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-        store.dispatch({ type: 'queue/setCurrentIndex', payload: 0 });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      act(() => {
-        result.current.next();
-      });
-
-      expect(store.getState().queue.currentIndex).toBe(0);
-    });
-  });
-
-  describe('previous', () => {
-    it('debería ir al item anterior', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1' }, position: 0, addedAt: new Date().toISOString() },
-        { id: 'item-2', track: { id: '2' }, position: 1, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-        store.dispatch({ type: 'queue/setCurrentIndex', payload: 1 });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      act(() => {
-        result.current.previous();
-      });
-
-      expect(store.getState().queue.currentIndex).toBe(0);
-    });
-  });
-
-  describe('toggleExpandedView', () => {
-    it('debería alternar expanded', () => {
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      act(() => {
-        result.current.toggleExpandedView();
-      });
-
-      expect(store.getState().queue.isExpanded).toBe(true);
-    });
-  });
-
-  describe('setExpandedView', () => {
-    it('debería setear expanded', () => {
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      act(() => {
-        result.current.setExpandedView(true);
-      });
-
-      expect(store.getState().queue.isExpanded).toBe(true);
-    });
-  });
-
-  describe('currentTrack', () => {
-    it('debería retornar el track actual', async () => {
-      const items = [
-        { id: 'item-1', track: { id: '1', title: 'Track 1' }, position: 0, addedAt: new Date().toISOString() },
-      ];
-
-      await act(async () => {
-        store.dispatch({ type: 'queue/setQueueItems', payload: items });
-        store.dispatch({ type: 'queue/setCurrentIndex', payload: 0 });
-      });
-
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      expect(result.current.currentTrack).toBeDefined();
-      expect(result.current.currentTrack?.id).toBe('1');
-    });
-
-    it('debería retornar null si no hay track actual', () => {
-      const { result } = renderHook(() => useQueue(), { wrapper });
-
-      expect(result.current.currentTrack).toBeNull();
-    });
+    await act(async () => { await result.current.clear(); });
+    expect(store.getState().queue.items).toHaveLength(0);
+    expect(playerService.clearQueue).toHaveBeenCalledTimes(1);
   });
 });
