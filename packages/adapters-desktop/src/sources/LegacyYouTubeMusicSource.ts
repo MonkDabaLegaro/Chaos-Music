@@ -9,8 +9,10 @@ interface LegacyVideo {
   duration?: number;
 }
 
+type LegacySearchType = 'all' | 'video' | 'playlist' | 'channel';
+
 export interface LegacyYouTubeService {
-  search(options: { query: string; type?: string; maxResults?: number }): Promise<{ videos: LegacyVideo[] }>;
+  search(options: { query: string; type?: LegacySearchType; maxResults?: number }): Promise<{ videos: LegacyVideo[] }>;
   getStreamUrl(videoId: string): Promise<{ url: string }>;
 }
 
