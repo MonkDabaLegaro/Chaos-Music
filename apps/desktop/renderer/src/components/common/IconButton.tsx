@@ -38,10 +38,15 @@ const IconButton: React.FC<IconButtonProps> = ({
     },
   };
 
+  const composedSx = [
+    baseSx,
+    ...(Array.isArray(sx) ? sx : sx ? [sx] : []),
+  ] as SxProps<Theme>;
+
   return (
     <MuiIconButton
       size={size}
-      sx={[baseSx, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])]}
+      sx={composedSx}
       {...props}
     >
       {children}
