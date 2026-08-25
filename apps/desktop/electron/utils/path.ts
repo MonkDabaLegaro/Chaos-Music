@@ -1,4 +1,4 @@
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { cwd } from 'node:process';
 
 export const workspace = cwd();
