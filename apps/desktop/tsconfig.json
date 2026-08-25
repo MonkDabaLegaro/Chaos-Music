@@ -3,9 +3,9 @@
   "compilerOptions": {
     "paths": {
       "@desktop/*": ["./*"],
-      "@electron/*": ["electron/*"],
-      "@renderer/*": ["renderer/src/*"],
-      "@shared/*": ["shared/*"]
+      "@electron/*": ["./electron/*"],
+      "@renderer/*": ["./renderer/src/*"],
+      "@shared/*": ["./shared/*"]
     }
   },
   "include": ["electron", "renderer", "shared", "electron.vite.config.ts"],
