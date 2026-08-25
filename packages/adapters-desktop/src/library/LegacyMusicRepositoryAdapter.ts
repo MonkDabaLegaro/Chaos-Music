@@ -1,82 +1,93 @@
 import type { Album, Artist, Genre, LibraryFolder, MusicRepository, SearchResults, Track, TrackFilter, TrackPage } from '@chaos-music/contracts';
 
-type LegacyTrack = Record<string, unknown>;
-type LegacyAlbum = Record<string, unknown>;
-type LegacyArtist = Record<string, unknown>;
-type LegacyLibrary = Record<string, unknown>;
+type LegacyRow = Record<string, unknown>;
 
 export interface LegacyDatabase {
   initialize(): void;
-  getAllTracks(filter?: Record<string, unknown>): { tracks: LegacyTrack[]; total: number };
-  getTrackById(id: string): LegacyTrack | null;
-  getAllArtists(): LegacyArtist[];
-  getAllAlbums(): LegacyAlbum[];
-  getAlbumsByArtist(id: string): LegacyAlbum[];
-  getAllGenres(): Array<Record<string, unknown>>;
-  search(query: string): { tracks: LegacyTrack[]; artists: LegacyArtist[]; albums: LegacyAlbum[] };
-  getFavoriteTracks(): LegacyTrack[];
+  getAllTracks(filter?: Record<string, unknown>): { tracks: unknown[]; total: number };
+  getTrackById(id: string): unknown | null;
+  getAllArtists(): unknown[];
+  getAllAlbums(): unknown[];
+  getAlbumsByArtist(id: string): unknown[];
+  getAllGenres(): unknown[];
+  search(query: string): { tracks: unknown[]; artists: unknown[]; albums: unknown[] };
+  getFavoriteTracks(): unknown[];
   toggleFavorite(id: string): boolean;
-  getRecentlyPlayedTracks(limit?: number): LegacyTrack[];
-  getAllLibraries(): LegacyLibrary[];
-  addLibrary(input: Record<string, unknown>): LegacyLibrary;
-  updateLibrary(id: string, input: Record<string, unknown>): LegacyLibrary | null;
+  getRecentlyPlayedTracks(limit?: number): unknown[];
+  getAllLibraries(): unknown[];
+  addLibrary(input: Record<string, unknown>): unknown;
+  updateLibrary(id: string, input: Record<string, unknown>): unknown | null;
   deleteLibrary(id: string): boolean;
 }
 
+const row = (value: unknown): LegacyRow =>
+  typeof value === 'object' && value !== null ? value as LegacyRow : {};
 const text = (value: unknown, fallback = '') => typeof value === 'string' ? value : fallback;
 const number = (value: unknown, fallback = 0) => typeof value === 'number' ? value : fallback;
 
-export const mapTrack = (row: LegacyTrack): Track => ({
-  id: text(row.id),
-  title: text(row.title, 'Unknown Track'),
-  artist: text(row.artist_name, 'Unknown Artist'),
-  album: text(row.album_name) || undefined,
-  albumId: text(row.album_id) || undefined,
-  duration: number(row.duration),
-  filePath: text(row.file_path),
-  coverPath: text(row.album_cover) || undefined,
-  genre: text(row.genre) || undefined,
-  year: typeof row.year === 'number' ? row.year : undefined,
-  trackNumber: typeof row.track_number === 'number' ? row.track_number : undefined,
-  discNumber: typeof row.disc_number === 'number' ? row.disc_number : undefined,
-  playCount: number(row.play_count),
-  isFavorite: Boolean(row.is_favorite),
-  dateAdded: text(row.date_added),
-  lastPlayed: text(row.last_played) || undefined,
-  bitrate: typeof row.bitrate === 'number' ? row.bitrate : undefined,
-  sampleRate: typeof row.sample_rate === 'number' ? row.sample_rate : undefined,
-  format: text(row.format) || undefined,
-});
+export const mapTrack = (value: unknown): Track => {
+  const data = row(value);
+  return {
+    id: text(data.id),
+    title: text(data.title, 'Unknown Track'),
+    artist: text(data.artist_name, 'Unknown Artist'),
+    album: text(data.album_name) || undefined,
+    albumId: text(data.album_id) || undefined,
+    duration: number(data.duration),
+    filePath: text(data.file_path),
+    coverPath: text(data.album_cover) || undefined,
+    genre: text(data.genre) || undefined,
+    year: typeof data.year === 'number' ? data.year : undefined,
+    trackNumber: typeof data.track_number === 'number' ? data.track_number : undefined,
+    discNumber: typeof data.disc_number === 'number' ? data.disc_number : undefined,
+    playCount: number(data.play_count),
+    isFavorite: Boolean(data.is_favorite),
+    dateAdded: text(data.date_added),
+    lastPlayed: text(data.last_played) || undefined,
+    bitrate: typeof data.bitrate === 'number' ? data.bitrate : undefined,
+    sampleRate: typeof data.sample_rate === 'number' ? data.sample_rate : undefined,
+    format: text(data.format) || undefined,
+  };
+};
 
-const mapArtist = (row: LegacyArtist): Artist => ({
-  id: text(row.id),
-  name: text(row.name, 'Unknown Artist'),
-  imagePath: text(row.image_path) || undefined,
-  bio: text(row.bio) || undefined,
-  genres: text(row.genres).split(',').map(value => value.trim()).filter(Boolean),
-  trackCount: number(row.track_count),
-  albumCount: number(row.album_count),
-});
+const mapArtist = (value: unknown): Artist => {
+  const data = row(value);
+  return {
+    id: text(data.id),
+    name: text(data.name, 'Unknown Artist'),
+    imagePath: text(data.image_path) || undefined,
+    bio: text(data.bio) || undefined,
+    genres: text(data.genres).split(',').map(item => item.trim()).filter(Boolean),
+    trackCount: number(data.track_count),
+    albumCount: number(data.album_count),
+  };
+};
 
-const mapAlbum = (row: LegacyAlbum): Album => ({
-  id: text(row.id),
-  name: text(row.name, 'Unknown Album'),
-  artistId: text(row.artist_id) || undefined,
-  artistName: text(row.artist_name) || undefined,
-  releaseYear: typeof row.release_year === 'number' ? row.release_year : undefined,
-  coverPath: text(row.cover_path) || undefined,
-  genre: text(row.genre) || undefined,
-  trackCount: number(row.track_count),
-});
+const mapAlbum = (value: unknown): Album => {
+  const data = row(value);
+  return {
+    id: text(data.id),
+    name: text(data.name, 'Unknown Album'),
+    artistId: text(data.artist_id) || undefined,
+    artistName: text(data.artist_name) || undefined,
+    releaseYear: typeof data.release_year === 'number' ? data.release_year : undefined,
+    coverPath: text(data.cover_path) || undefined,
+    genre: text(data.genre) || undefined,
+    trackCount: number(data.track_count),
+  };
+};
 
-const mapLibrary = (row: LegacyLibrary): LibraryFolder => ({
-  id: text(row.id),
-  name: text(row.name),
-  path: text(row.path),
-  isActive: Boolean(row.is_active),
-  lastScan: text(row.last_scan) || undefined,
-  createdAt: text(row.created_at),
-});
+const mapLibrary = (value: unknown): LibraryFolder => {
+  const data = row(value);
+  return {
+    id: text(data.id),
+    name: text(data.name),
+    path: text(data.path),
+    isActive: Boolean(data.is_active),
+    lastScan: text(data.last_scan) || undefined,
+    createdAt: text(data.created_at),
+  };
+};
 
 export class LegacyMusicRepositoryAdapter implements MusicRepository {
   constructor(private readonly db: LegacyDatabase) {}
@@ -98,16 +109,16 @@ export class LegacyMusicRepositoryAdapter implements MusicRepository {
     return { tracks: result.tracks.map(mapTrack), total: result.total };
   }
 
-  getTrackById(id: string) { const row = this.db.getTrackById(id); return row ? mapTrack(row) : null; }
+  getTrackById(id: string) { const value = this.db.getTrackById(id); return value ? mapTrack(value) : null; }
   getArtists() { return this.db.getAllArtists().map(mapArtist); }
   getAlbums(artistId?: string) { return (artistId ? this.db.getAlbumsByArtist(artistId) : this.db.getAllAlbums()).map(mapAlbum); }
-  getGenres(): Genre[] { return this.db.getAllGenres().map(row => ({ id: String(row.id ?? ''), name: text(row.name), trackCount: number(row.track_count) })); }
+  getGenres(): Genre[] { return this.db.getAllGenres().map(value => { const data = row(value); return { id: String(data.id ?? ''), name: text(data.name), trackCount: number(data.track_count) }; }); }
   search(query: string): SearchResults { const result = this.db.search(query); return { tracks: result.tracks.map(mapTrack), artists: result.artists.map(mapArtist), albums: result.albums.map(mapAlbum) }; }
   getFavorites() { return this.db.getFavoriteTracks().map(mapTrack); }
   toggleFavorite(id: string) { return this.db.toggleFavorite(id); }
   getRecentlyPlayed(limit?: number) { return this.db.getRecentlyPlayedTracks(limit).map(mapTrack); }
   getLibraries() { return this.db.getAllLibraries().map(mapLibrary); }
   addLibrary(input: { name: string; path: string }) { return mapLibrary(this.db.addLibrary({ ...input, scan_depth: -1, file_types: 'mp3,wav,flac,aac,ogg,m4a', is_active: 1 })); }
-  updateLibrary(id: string, input: Partial<Pick<LibraryFolder, 'name' | 'path' | 'isActive'>>) { const row = this.db.updateLibrary(id, { name: input.name, path: input.path, is_active: input.isActive === undefined ? undefined : Number(input.isActive) }); return row ? mapLibrary(row) : Promise.reject(new Error(`Library ${id} not found`)); }
+  updateLibrary(id: string, input: Partial<Pick<LibraryFolder, 'name' | 'path' | 'isActive'>>) { const value = this.db.updateLibrary(id, { name: input.name, path: input.path, is_active: input.isActive === undefined ? undefined : Number(input.isActive) }); return value ? mapLibrary(value) : Promise.reject(new Error(`Library ${id} not found`)); }
   removeLibrary(id: string) { return this.db.deleteLibrary(id); }
 }
